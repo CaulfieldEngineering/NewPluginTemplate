@@ -1,33 +1,58 @@
 cmake_minimum_required(VERSION 3.22)
 
 # Version is needed by JUCE.
-project(AudioPlugin VERSION 0.1.0)
+project(${wPLUGIN_NAME} VERSION ${wPROJECT_VERSION})
 
 # Adding a directory with the library/application name as a subfolder of the
 # include folder is a good practice. It helps avoid name clashes later on.
-set(INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include/YourPluginName")
+set(INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include/myHeaders")
+
+    # Version is needed by JUCE.
+    #####project(AudioPlugin VERSION 0.1.0)
+
+    # Adding a directory with the library/application name as a subfolder of the
+    # include folder is a good practice. It helps avoid name clashes later on.
+    #####set(INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include/YourPluginName")
 
 
 # Adds a plugin target (that's basically what the Projucer does).
-juce_add_plugin(${PROJECT_NAME}
-    COMPANY_NAME "Wonderland Audio" # change this
-    IS_SYNTH FALSE                  # may change this
-    NEEDS_MIDI_INPUT FALSE          # may change this
-    NEEDS_MIDI_OUTPUT FALSE         # may change this
-    PLUGIN_MANUFACTURER_CODE "WLAD" # change this
-    PLUGIN_CODE EXPL                # change this
-    FORMATS VST3                    # may change this
-    PRODUCT_NAME "YourPluginName"   # change this
+juce_add_plugin( ${PROJECT_NAME}
+    COMPANY_NAME ${wCOMPANY_NAME}
+    IS_SYNTH ${wIS_SYNTH}
+    NEEDS_MIDI_INPUT ${wNEEDS_MIDI_INPUT}
+    NEEDS_MIDI_OUTPUT ${wNEEDS_MIDI_OUTPUT}
+    PLUGIN_MANUFACTURER_CODE ${wPLUGIN_MANUFACTURER_CODE}
+    PLUGIN_CODE ${wPLUGIN_CODE}
+    FORMATS ${wFORMATS}
+    PRODUCT_NAME ${wPLUGIN_NAME}
 )
+
+
+
+
+
+
+
+# Run the Python script to generate the file list
+execute_process(
+    COMMAND ${CMAKE_COMMAND} -E env python3 ${CMAKE_CURRENT_SOURCE_DIR}/createSourceList.py
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    RESULT_VARIABLE PYTHON_RUN_RESULT
+)
+
+if(NOT PYTHON_RUN_RESULT EQUAL "0")
+    message(FATAL_ERROR "Failed to run Python script to generate file list")
+endif()
+
+
+
+
 
 
 # Sets the source files of the plugin project.
 target_sources(${PROJECT_NAME}
     PRIVATE
-        source/PluginEditor.cpp
-        source/PluginProcessor.cpp
-        ${INCLUDE_DIR}/PluginEditor.h
-        ${INCLUDE_DIR}/PluginProcessor.h
+        ${PLUGIN_SOURCES}
 )
 
 # Sets the include directories of the plugin project.
