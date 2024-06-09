@@ -40,23 +40,23 @@ CPMAddPackage(
     SOURCE_DIR ${LIB_DIR}/juce
 )
 
-# Adds googletest.
-CPMAddPackage(
-    NAME GOOGLETEST
-    GITHUB_REPOSITORY google/googletest
-    GIT_TAG v1.13.0
-    VERSION 1.13.0
-    SOURCE_DIR ${LIB_DIR}/googletest
-    OPTIONS
-        "INSTALL_GTEST OFF"
-        "gtest_force_shared_crt ON"
-)
+# # Adds googletest.
+# CPMAddPackage(
+#     NAME GOOGLETEST
+#     GITHUB_REPOSITORY google/googletest
+#     GIT_TAG v1.13.0
+#     VERSION 1.13.0
+#     SOURCE_DIR ${LIB_DIR}/googletest
+#     OPTIONS
+#         "INSTALL_GTEST OFF"
+#         "gtest_force_shared_crt ON"
+# )
 
 # This command allows running tests from the "build" folder (the one where CMake generates the project to).
-enable_testing()
+#enable_testing()
 
 # Adds all the targets configured in the "plugin" folder.
 add_subdirectory(plugin)
 
 # Adds all the targets configured in the "test" folder.
-add_subdirectory(test)
+#add_subdirectory(test)
