@@ -47,6 +47,6 @@ jobs:
     - name: Upload Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: Build-Output
+        name: Build-Output-${{ matrix.os }}
         path: ${{github.workspace}}/build/plugin/MyPluginTitle_artefacts/Release
         retention-days: 7  # Optional: specify how long to retain the artifacts
