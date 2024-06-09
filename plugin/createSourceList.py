@@ -2,7 +2,6 @@ import os
 
 # Directory to search for source files
 source_dir = os.path.join(os.path.dirname(__file__), 'source')
-include_dir = os.path.join(os.path.dirname(__file__), 'include/myHeaders')
 
 # Extensions to include
 extensions = ('.cpp', '.h')
@@ -16,10 +15,9 @@ def list_files(directory):
     return files
 
 source_files = list_files(source_dir)
-include_files = list_files(include_dir)
 
 with open(os.path.join(os.path.dirname(__file__), 'sourceListResult.cmake'), 'w') as f:
     f.write('set(PLUGIN_SOURCES\n')
-    for file in source_files + include_files:
+    for file in source_files:
         f.write(f'    {file}\n')
     f.write(')\n')
