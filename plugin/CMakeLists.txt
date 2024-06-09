@@ -7,13 +7,6 @@ project(${wPLUGIN_NAME} VERSION ${wPROJECT_VERSION})
 # include folder is a good practice. It helps avoid name clashes later on.
 set(INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include/myHeaders")
 
-    # Version is needed by JUCE.
-    #####project(AudioPlugin VERSION 0.1.0)
-
-    # Adding a directory with the library/application name as a subfolder of the
-    # include folder is a good practice. It helps avoid name clashes later on.
-    #####set(INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include/YourPluginName")
-
 
 # Adds a plugin target (that's basically what the Projucer does).
 juce_add_plugin( ${PROJECT_NAME}
@@ -28,11 +21,6 @@ juce_add_plugin( ${PROJECT_NAME}
 )
 
 
-
-
-
-
-
 # Run the Python script to generate the file list
 execute_process(
     COMMAND ${CMAKE_COMMAND} -E env python3 ${CMAKE_CURRENT_SOURCE_DIR}/createSourceList.py
@@ -44,16 +32,28 @@ if(NOT PYTHON_RUN_RESULT EQUAL "0")
     message(FATAL_ERROR "Failed to run Python script to generate file list")
 endif()
 
+# Include the generated file list
+include(${CMAKE_CURRENT_SOURCE_DIR}/sourceListResult.cmake)
 
 
-
-
+# Console out the value of PLUGIN_SOURCES
+message(STATUS "Source files for ${PROJECT_NAME}: ${PLUGIN_SOURCES}")
 
 # Sets the source files of the plugin project.
 target_sources(${PROJECT_NAME}
     PRIVATE
         ${PLUGIN_SOURCES}
 )
+
+# # Sets the source files of the plugin project.
+# target_sources(${PROJECT_NAME}
+#     PRIVATE
+#         source/PluginEditor.cpp
+#         source/PluginProcessor.cpp
+#         ${INCLUDE_DIR}/PluginEditor.h
+#         ${INCLUDE_DIR}/PluginProcessor.h
+# )
+
 
 # Sets the include directories of the plugin project.
 target_include_directories(${PROJECT_NAME}

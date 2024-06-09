@@ -5,14 +5,13 @@
 # $ cmake --version
 cmake_minimum_required(VERSION 3.22)
 
-    # Include the configuration file
-    include(${CMAKE_CURRENT_SOURCE_DIR}/config.cmake)
 
-    # Use the variables defined in config.cmake
-    #project(${wPLUGIN_NAME} VERSION ${wPROJECT_VERSION})
+# Include the configuration file
+include(${CMAKE_CURRENT_SOURCE_DIR}/config.cmake)
 
-    # Sets a few variables, like PROJECT_NAME
-    #####project(AudioPluginStarter)
+
+# Use the variables defined in config.cmake
+project(${wPLUGIN_NAME} VERSION ${wPROJECT_VERSION})
 
 
 # Always use the newest C++ standard on green-field projects if possible.
