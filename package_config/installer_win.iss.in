@@ -1,0 +1,68 @@
+; installer.iss.in
+
+#define MyCompanyName "@wCOMPANY_NAME@"
+#define MyAppName "@wPLUGIN_NAME@"
+#define MyAppExeName "@wPLUGIN_NAME@.exe"
+#define MyAppVst3Name "@wPLUGIN_NAME@.vst3"
+#define MyAppVersion "@wPROJECT_VERSION@"
+#define MyOutputBaseFilename "@wPLUGIN_NAME@WindowsInstaller"
+
+[Setup]
+AppName={#MyAppName}
+AppVersion={#MyAppVersion}
+DefaultDirName={pf64}\{#MyCompanyName}\{#MyAppName}
+DefaultGroupName={#MyAppName}
+OutputDir=.
+OutputBaseFilename={#MyOutputBaseFilename}
+Compression=lzma
+SolidCompression=yes
+DisableDirPage=yes
+DisableProgramGroupPage=yes
+ArchitecturesInstallIn64BitMode=x64
+ArchitecturesAllowed=x64
+
+[Components]
+//Name: "standalone"; Description: "Standalone (.EXE)"; Types: full compact custom
+//Name: "vst3"; Description: "VST3 (.VST3)"; Types: full compact custom
+
+[Tasks]
+Name: "install_standalone"; Description: "Standalone (.EXE)"; GroupDescription: "Select components to install:";
+Name: "install_vst3"; Description: "VST3 (.VST3)"; GroupDescription: "Select components to install:";
+
+[Files]
+Source: "plugin\{#MyAppName}_artefacts\Release\Standalone\{#MyAppExeName}"; DestDir: "{pf64}\{#MyCompanyName}\{#MyAppName}"; Flags: ignoreversion;
+Source: "plugin\{#MyAppName}_artefacts\Release\VST3\{#MyAppVst3Name}\Contents\x86_64-win\{#MyAppVst3Name}"; DestDir: "{commoncf}\VST3"; Flags: ignoreversion;
+
+[Icons]
+Name: "{group}\{#MyAppName} Standalone"; Filename: "{pf64}\{#MyCompanyName}\{#MyAppName}\{#MyAppExeName}";
+
+[Code]
+function NextButtonClick(CurPageID: Integer): Boolean;
+begin
+  Result := True;
+  if CurPageID = wpSelectTasks then
+  begin
+    if not WizardIsTaskSelected('install_standalone') and
+       not WizardIsTaskSelected('install_vst3') then
+    begin
+      MsgBox('Please select at least one component to install.', mbError, MB_OK);
+      Result := False;
+    end;
+  end;
+end;
+
+procedure CurPageChanged(CurPageID: Integer);
+var
+  InstallMessage: String;
+begin
+  if CurPageID = wpFinished then
+  begin
+    InstallMessage := 'Installation Complete!' + #13#10 + #13#10;
+    if WizardIsTaskSelected('install_standalone') then
+      InstallMessage := InstallMessage + 'Standalone (.EXE) installed to: ' + #13#10 + ExpandConstant('{pf}\{#MyCompanyName}\{#MyAppName}\{#MyAppExeName}') + #13#10 + #13#10;
+    if WizardIsTaskSelected('install_vst3') then
+      InstallMessage := InstallMessage + 'VST3 (.VST3) installed to: ' + #13#10 + ExpandConstant('{commoncf}\VST3\{#MyAppVst3Name}') + #13#10;
+
+    MsgBox(InstallMessage, mbInformation, MB_OK);
+  end;
+end;

@@ -1,4 +1,3 @@
-
 # Mandatory line, sets the minimum version of CMake that should be used with this repository.
 # I specified 3.22 because I trust it. However, currently I have 3.26 installed on my machine.
 # To verify your version run
@@ -20,6 +19,13 @@ if (APPLE)
     # On Mac, we need to wait for a new JUCE version that fixes the compilation issue
     set(CMAKE_CXX_STANDARD 20)
 endif()
+
+# Configure the installation package files
+configure_file(
+  ${CMAKE_SOURCE_DIR}/package_config/installer_win.iss.in
+  ${CMAKE_BINARY_DIR}/installer_win.iss
+  @ONLY
+)
 
 
 # I like to download the dependencies to the same folder as the project.
@@ -53,10 +59,11 @@ CPMAddPackage(
 # )
 
 # This command allows running tests from the "build" folder (the one where CMake generates the project to).
-#enable_testing()
+enable_testing()
 
 # Adds all the targets configured in the "plugin" folder.
 add_subdirectory(plugin)
 
 # Adds all the targets configured in the "test" folder.
 #add_subdirectory(test)
+

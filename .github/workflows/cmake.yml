@@ -1,4 +1,4 @@
-name: CMake
+name: Build and Upload
 
 on:
   push:
@@ -11,42 +11,203 @@ jobs:
     strategy:
       matrix:
         os: [macos-latest, windows-latest]
+        #os: [windows-latest]
+        #os: [macos-latest]
         build_type: [Release]
 
     runs-on: ${{ matrix.os }}
 
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-    - name: Cache dependencies
-      id: cache-libs
-      uses: actions/cache@v4
-      with:
-        path: ${{github.workspace}}
-        key: libs
+    # Cache Dependencies
+    # ==========================================================================================
+    # - name: Cache dependencies
+    #   id: cache-libs
+    #   uses: actions/cache@v4
+    #   with:
+    #     path: | 
+    #       ${{github.workspace}}/libs
+    #     key: libs
 
-    # CONFIGURE PROJECTS
-    # ===========================================================================
+    # Configure Projects
+    # ==========================================================================================
     - name: Configure CMake
       run: cmake -S . -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+      #run: cmake -S . -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} --debug-output -DCMAKE_VERBOSE_MAKEFILE=ON
 
-    # COMPILE EXECUTABLES
-    # ===========================================================================
+    # Compile Executables
+    # ==========================================================================================
     - name: Build
       run: cmake --build ${{github.workspace}}/build --config ${{ matrix.build_type }}
 
-    # RUN TESTING
-    # ===========================================================================
-    # Uncomment if you have tests to run
-    # - name: Test
-    #   working-directory: ${{github.workspace}}/build
-    #   run: ctest -C ${{ matrix.build_type }}
+    # Install Inno Setup (Windows Only)
+    # ==========================================================================================
+    - name: Install Inno Setup
+      if: matrix.os == 'windows-latest'
+      run: choco install innosetup --yes
 
-    # UPLOAD ARTIFACTS
-    # ===========================================================================
-    - name: Upload Artifacts
-      uses: actions/upload-artifact@v4
+    # Print build folder contents (Windows)
+    # ==========================================================================================
+    - name: List Build Directory Contents (Windows Only)
+      if: matrix.os == 'windows-latest'
+      run: dir "${{github.workspace}}\build"
+      shell: pwsh
+
+    # Compile Inno Setup script (Windows Only)
+    # ==========================================================================================
+    - name: Compile Inno Setup script
+      if: matrix.os == 'windows-latest'
+      run: |
+        & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' "${{github.workspace}}\build\installer_win.iss"
+      shell: pwsh
+
+    # Print build folder contents (Windows)
+    # ==========================================================================================
+    - name: List Build Directory Contents (Windows Only)
+      if: matrix.os == 'windows-latest'
+      run: dir "${{github.workspace}}\build"
+      shell: pwsh
+ 
+    # Create Installer (Mac)
+    # ==========================================================================================
+
+
+
+    # Sign Installer (Win)
+    # ==========================================================================================
+
+
+
+    # Sign Installer (Mac)
+    # ==========================================================================================
+
+
+
+
+
+
+    # Setup SSH
+    # ==========================================================================================
+    - name: Setup SSH
+      uses: webfactory/ssh-agent@v0.5.3
       with:
-        name: Build-Output-${{ matrix.os }}
-        path: ${{github.workspace}}/build/plugin/MyPluginTitle_artefacts/Release
-        retention-days: 7  # Optional: specify how long to retain the artifacts
+        ssh-private-key: ${{ secrets.ID_GITHUB }}
+
+    # Add Host Key (Windows)
+    # ==========================================================================================
+    - name: Add Host Key (Windows)
+      if: matrix.os == 'windows-latest'
+      shell: pwsh
+      run: |
+        if (-Not (Test-Path -Path $HOME/.ssh)) {
+          New-Item -ItemType Directory -Path $HOME/.ssh
+        }
+        ssh-keyscan -p 7822 CaulfieldEngineering.com | Out-File -Append -Encoding ascii $HOME/.ssh/known_hosts
+
+    # Add Host Key (macOS)
+    # ==========================================================================================
+    - name: Add Host Key (macOS)
+      if: matrix.os == 'macos-latest'
+      run: |
+        mkdir -p ~/.ssh
+        ssh-keyscan -p 7822 CaulfieldEngineering.com >> ~/.ssh/known_hosts
+
+    # Create SSH Configuration
+    # ==========================================================================================
+    - name: Create SSH Config
+      shell: bash
+      run: |
+        mkdir -p ~/.ssh
+        echo "Host CaulfieldEngineering.com
+          HostName CaulfieldEngineering.com
+          User caulfiel
+          Port 7822
+          MACs hmac-sha2-256
+          StrictHostKeyChecking no" > ~/.ssh/config
+
+    # Verify SSH Key and Connection
+    # ==========================================================================================
+    - name: Verify SSH Key and Connection
+      shell: bash
+      run: |
+        echo "Checking loaded SSH keys:"
+        ssh-add -l
+        
+        echo "Attempting SSH connection:"
+        ssh -vvv CaulfieldEngineering.com exit
+
+    # Debug SSH Connection
+    # ==========================================================================================
+    - name: Debug SSH Connection
+      shell: bash
+      run: |
+        ssh CaulfieldEngineering.com "echo 'SSH connection successful'"
+
+    # Debug File Location
+    # ==========================================================================================
+    # - name: Debug File Location
+    #   shell: bash
+    #   run: |
+    #     echo "Current working directory: $(pwd)"
+    #     echo "Contents of current directory:"
+    #     ls -R
+    #     echo "Contents of GITHUB_WORKSPACE:"
+    #     ls -R $GITHUB_WORKSPACE
+
+    # Upload Installers to Server (SCP)
+    # ==========================================================================================
+    - name: Upload to Server (SCP)
+      shell: bash
+      run: |
+        set -x  # Enable debugging output
+        
+        echo "Starting upload process"
+        DEST_DIR="${{ matrix.os == 'windows-latest' && 'win' || 'mac' }}"
+        echo "DEST_DIR set to: $DEST_DIR"
+        
+        REPO_NAME=$(echo $GITHUB_REPOSITORY | awk -F / '{print $2}')
+        echo "REPO_NAME set to: $REPO_NAME"
+    
+        if [ "${{ matrix.os }}" == "macos-latest" ]; then
+          SOURCE_FILE=""  # Corrected variable name
+          echo "macOS build: Installer TBD"
+        elif [ "${{ matrix.os }}" == "windows-latest" ]; then
+          SOURCE_FILE="${{github.workspace}}/build/${REPO_NAME}WindowsInstaller.exe"
+          echo "Windows build: SOURCE_FILE set to $SOURCE_FILE"
+        else
+          echo "Unsupported OS: ${{ matrix.os }}"
+          exit 1
+        fi
+    
+        DEST_PATH="CaulfieldEngineering.com:/home/caulfiel/public_html/plug-ins/${REPO_NAME}/uploads/${DEST_DIR}/"
+        
+        echo "Beginning SCP Transfer"
+        echo "Source file: $SOURCE_FILE"
+        echo "Destination path: $DEST_PATH"
+        
+        if [ -f "$SOURCE_FILE" ]; then
+          echo "Source file exists"
+        else
+          echo "Source file does not exist"
+          ls -l ${{github.workspace}}/build/
+          exit 1
+        fi
+        
+        SCP_COMMAND="scp -v \"$SOURCE_FILE\" \"$DEST_PATH\""
+        
+        echo "Executing SCP command: $SCP_COMMAND"
+        
+        if eval $SCP_COMMAND; then
+          echo "SCP command succeeded"
+        else
+          echo "SCP command failed with exit code $?"
+          exit 1
+        fi
+    
+        set +x  # Disable debugging output
+
+    # Once Uploaded, Duplicate latest files and Rename to Genericize
+    # ==========================================================================================
+    
