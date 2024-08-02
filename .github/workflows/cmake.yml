@@ -55,6 +55,16 @@ jobs:
       run: dir "${{github.workspace}}\build"
       shell: pwsh
 
+    # Sign Payload (Win)
+    # ==========================================================================================
+
+
+
+    # Sign Payload (Mac)
+    # ==========================================================================================
+
+
+
     # Compile Inno Setup script (Windows Only)
     # ==========================================================================================
     - name: Compile Inno Setup script
@@ -72,7 +82,15 @@ jobs:
  
     # Create Installer (Mac)
     # ==========================================================================================
+    - name: Install Packages
+      if: matrix.os == 'macos-latest'
+      run: brew install packages
 
+    - name: Build Installer Package (Mac)
+      if: matrix.os == 'macos-latest'
+      run: |
+        mkdir -p ${{github.workspace}}/build/package
+        packagesbuild --project ${{github.workspace}}/build/installer_mac.pkgproj
 
 
     # Sign Installer (Win)
@@ -84,6 +102,13 @@ jobs:
     # ==========================================================================================
 
 
+    # Notarize the Installer (Mac)
+    # ==========================================================================================
+
+
+
+    # Staple the Notarization Ticket (Mac)
+    # ==========================================================================================
 
 
 
