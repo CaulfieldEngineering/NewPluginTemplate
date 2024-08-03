@@ -1,18 +1,19 @@
 ; installer.iss.in
 
+// These variables are populated via CMakeLists.txt
+// Section: "# Configure the installation package files"
+// =============================================================================================
 #define MyCompanyName "@wCOMPANY_NAME@"
 #define MyAppName "@wPLUGIN_NAME@"
 #define MyAppExeName "@wPLUGIN_NAME@.exe"
 #define MyAppVst3Name "@wPLUGIN_NAME@.vst3"
 #define MyAppVersion "@wPROJECT_VERSION@"
-#define MyOutputBaseFilename "@wPLUGIN_NAME@WinInstaller-@wPROJECT_VERSION"
-
+#define MyOutputBaseFilename "@wPLUGIN_NAME@WindowsInstaller"
 
 [Setup]
 // =============================================================================================
-AppName={#MyAppName}
+AppName={#MyCompanyName} - {#MyAppName}
 AppVersion={#MyAppVersion}
-AppVerName = {#MyAppName} v{#MyAppVersion} by {#MyCompanyName}
 DefaultDirName={pf64}\{#MyCompanyName}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 OutputDir=.
@@ -28,14 +29,15 @@ DisableDirPage=yes
 
 [Components]
 // =============================================================================================
-Name: "standalone"; Description: "Standalone (.EXE)"; Types: full custom
-Name: "vst3"; Description: "VST3 (.VST3)"; Types: full custom
+Name: "standalone"; Description: "@wPLUGIN_NAME@ - Standalone"; Types: full custom
+Name: "vst3"; Description: "@wPLUGIN_NAME@ - VST3"; Types: full custom
 
 [Dirs]
 // =============================================================================================
 Name: "{app}"
 
 [Files]
+// Absolute path is Relative to Github Workspace > Build
 // =============================================================================================
 Source: "plugin\{#MyAppName}_artefacts\Release\Standalone\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion; Components: standalone
 Source: "plugin\{#MyAppName}_artefacts\Release\VST3\{#MyAppVst3Name}\Contents\x86_64-win\{#MyAppVst3Name}"; DestDir: "{code:GetVST3Dir}"; Flags: ignoreversion; Components: vst3
