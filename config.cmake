@@ -1,7 +1,7 @@
 # config.cmake
 
 # Define global variables
-set(wPLUGIN_NAME                "PluginTitle")
+set(wPLUGIN_NAME                "NewPluginTemplate")
 set(wCOMPANY_NAME               "Wonderland Audio")
 set(wCOMPANY_ID                 "WonderlandAudio")
 set(wPROJECT_VERSION            "0.1.0")
