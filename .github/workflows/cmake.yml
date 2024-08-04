@@ -57,7 +57,8 @@ jobs:
           value=$(echo $value | tr -d '"')  # Remove quotes
           echo "$key=$value" >> $GITHUB_ENV
         done < <(grep 'set(w' ${GITHUB_WORKSPACE}/config.cmake | sed -e 's/set(//g' -e 's/)//g' -e 's/\s\+/ /g')
-
+      shell: bash
+      
       # Debug; print project variables
       # ==========================================================================================
     - name: Use Variables
