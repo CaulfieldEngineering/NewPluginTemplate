@@ -10,10 +10,13 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [macos-latest, windows-latest]
-        #os: [windows-latest]
-        #os: [macos-latest]
+        #os: [macos-latest, windows-latest]
         build_type: [Release]
+        include:
+          - os: windows-latest
+            cmake_arch: -A x64
+          - os: macos-latest
+            cmake_arch: -DCMAKE_OSX_ARCHITECTURES=x86_64
 
     runs-on: ${{ matrix.os }}
 
@@ -34,26 +37,48 @@ jobs:
     # Configure Projects
     # ==========================================================================================
     - name: Configure CMake
-      run: cmake -S . -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+      #run: cmake -S . -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
       #run: cmake -S . -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} --debug-output -DCMAKE_VERBOSE_MAKEFILE=ON
+      run: cmake -S . -B ${{github.workspace}}/build ${{ matrix.cmake_arch }} -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
 
     # Compile Executables
     # ==========================================================================================
     - name: Build
+      #run: cmake --build ${{github.workspace}}/build --config ${{ matrix.build_type }}
       run: cmake --build ${{github.workspace}}/build --config ${{ matrix.build_type }}
+
+    # Gather project variables from config.cmake
+    # ==========================================================================================
+    - name: Extract and Set Configuration Variables
+      run: |
+        echo "Reading configuration from config.cmake..."
+        while IFS=' ' read -r key value
+        do
+          value=$(echo $value | tr -d '"')  # Remove quotes
+          echo "$key=$value" >> $GITHUB_ENV
+        done < <(grep 'set(w' ${GITHUB_WORKSPACE}/config.cmake | sed -e 's/set(//g' -e 's/)//g' -e 's/\s\+/ /g')
+
+      # Debug; print project variables
+      # ==========================================================================================
+    - name: Use Variables
+      run: |
+        echo "Plugin Name: $wPLUGIN_NAME"
+        echo "Company Name: $wCOMPANY_NAME"
+        echo "Project Version: $wPROJECT_VERSION"
+        echo "Manufacturer Code: $wPLUGIN_MANUFACTURER_CODE"
+        echo "Formats: $wFORMATS"
+        echo "Is Synth: $wIS_SYNTH"
+        echo "Needs MIDI Input: $wNEEDS_MIDI_INPUT"
+        echo "Needs MIDI Output: $wNEEDS_MIDI_OUTPUT"
+        echo "Plugin Code: $wPLUGIN_CODE"
 
     # Install Inno Setup (Windows Only)
     # ==========================================================================================
-    - name: Install Inno Setup
+    - name: Install Inno Setup (Windows Only)
       if: matrix.os == 'windows-latest'
       run: choco install innosetup --yes
 
-    # Print build folder contents (Windows)
-    # ==========================================================================================
-    - name: List Build Directory Contents (Windows Only)
-      if: matrix.os == 'windows-latest'
-      run: dir "${{github.workspace}}\build"
-      shell: pwsh
+
 
     # Sign Payload (Win)
     # ==========================================================================================
@@ -67,30 +92,101 @@ jobs:
 
     # Compile Inno Setup script (Windows Only)
     # ==========================================================================================
-    - name: Compile Inno Setup script
+    - name: Compile Inno Setup script (Windows Only)
       if: matrix.os == 'windows-latest'
       run: |
         & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' "${{github.workspace}}\build\installer_win.iss"
       shell: pwsh
 
-    # Print build folder contents (Windows)
-    # ==========================================================================================
-    - name: List Build Directory Contents (Windows Only)
-      if: matrix.os == 'windows-latest'
-      run: dir "${{github.workspace}}\build"
-      shell: pwsh
- 
-    # Create Installer (Mac)
-    # ==========================================================================================
-    - name: Install Packages
-      if: matrix.os == 'macos-latest'
-      run: brew install packages
 
-    - name: Build Installer Package (Mac)
+ 
+
+
+
+
+
+
+
+
+    # Package: Standalone (Mac)
+    # ==========================================================================================
+    - name: Create Standalone Package (Mac Only)
       if: matrix.os == 'macos-latest'
+      env:
+        REPOSITORY_NAME: ${{ github.event.repository.name }}
       run: |
-        mkdir -p ${{github.workspace}}/build/package
-        packagesbuild --project ${{github.workspace}}/build/installer_mac.pkgproj
+        mkdir -p ${GITHUB_WORKSPACE}/build/output
+    
+        # Format COMPANY_NAME by removing spaces
+        FORMATTED_COMPANY_NAME=$(echo "$wCOMPANY_NAME" | tr -d ' ')
+
+        echo "Using formatted company name: $FORMATTED_COMPANY_NAME"
+        echo "Using version: $VERSION"
+
+        pkgbuild \
+          --root "${GITHUB_WORKSPACE}/build/plugin/${REPOSITORY_NAME}_artefacts/Release/Standalone" \
+          --identifier com.${FORMATTED_COMPANY_NAME}.${REPOSITORY_NAME}.vst3 \
+          --version $wPROJECT_VERSION \
+          --install-location /Applications/${REPOSITORY_NAME} \
+          ${GITHUB_WORKSPACE}/build/output/${REPOSITORY_NAME}_Standalone.pkg
+  
+      # Package: VST3 (Mac)
+      # ==========================================================================================
+    - name: Create VST3 Package (Mac Only)
+      if: matrix.os == 'macos-latest'
+      env:
+        REPOSITORY_NAME: ${{ github.event.repository.name }}
+      run: |
+        mkdir -p ${GITHUB_WORKSPACE}/build/output
+
+        # Format COMPANY_NAME by removing spaces
+        FORMATTED_COMPANY_NAME=$(echo "$wCOMPANY_NAME" | tr -d ' ')
+
+        echo "Using formatted company name: $FORMATTED_COMPANY_NAME"
+        echo "Using version: $VERSION"
+
+        pkgbuild \
+          --root "${GITHUB_WORKSPACE}/build/plugin/${REPOSITORY_NAME}_artefacts/Release/VST3" \
+          --identifier com.${FORMATTED_COMPANY_NAME}.${REPOSITORY_NAME}.vst3 \
+          --version $wPROJECT_VERSION \
+          --install-location /Library/Audio/Plug-Ins/VST3 \
+          ${GITHUB_WORKSPACE}/build/output/${REPOSITORY_NAME}_VST3.pkg
+
+    # Package: Distribution (Mac)
+    # ==========================================================================================
+    - name: Create Distribution Package (Mac Only)
+      if: matrix.os == 'macos-latest'
+      env:
+        REPOSITORY_NAME: ${{ github.event.repository.name }}
+      run: |
+        mkdir -p ${GITHUB_WORKSPACE}/build/output
+        cp ${{github.workspace}}/build/distribution.xml ${GITHUB_WORKSPACE}/build/output/distribution.xml
+        echo "File 'distribution.xml' copied to build/output folder."
+
+        productbuild \
+          --distribution ${GITHUB_WORKSPACE}/build/output/distribution.xml \
+          --package-path ${GITHUB_WORKSPACE}/build/output \
+          ${{github.workspace}}/build/${REPOSITORY_NAME}MacInstaller.pkg
+
+      # Temporary Debug
+      # ==========================================================================================
+    # - name: Debug - List Build Directory Contents
+    #   run: |
+    #     echo "Listing contents of ${GITHUB_WORKSPACE}/build:"
+    #     ls -R ${GITHUB_WORKSPACE}/build
+
+    # Print build folder contents
+    # ==========================================================================================
+    - name: List Build Directory Contents
+      run: |
+        Write-Host "Listing all files and directories in the build/plugin directory:"
+        Get-ChildItem -Path "${{github.workspace}}\build\" -Recurse
+      shell: pwsh
+
+
+
+
+
 
 
     # Sign Installer (Win)
@@ -196,8 +292,8 @@ jobs:
         echo "REPO_NAME set to: $REPO_NAME"
     
         if [ "${{ matrix.os }}" == "macos-latest" ]; then
-          SOURCE_FILE=""  # Corrected variable name
-          echo "macOS build: Installer TBD"
+          SOURCE_FILE="${{github.workspace}}/build/${REPO_NAME}MacInstaller.pkg"
+          echo "macOS build: SOURCE_FILE set to $SOURCE_FILE"
         elif [ "${{ matrix.os }}" == "windows-latest" ]; then
           SOURCE_FILE="${{github.workspace}}/build/${REPO_NAME}WindowsInstaller.exe"
           echo "Windows build: SOURCE_FILE set to $SOURCE_FILE"
