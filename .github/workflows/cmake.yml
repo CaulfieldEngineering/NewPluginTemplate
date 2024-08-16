@@ -167,7 +167,7 @@ jobs:
         productbuild \
           --distribution ${GITHUB_WORKSPACE}/build/output/distribution.xml \
           --package-path ${GITHUB_WORKSPACE}/build/output \
-          ${{github.workspace}}/build/${REPOSITORY_NAME}MacInstaller.pkg
+          ${{github.workspace}}/build/${REPOSITORY_NAME}MacInstaller_${wPROJECT_VERSION}.pkg
 
       # Temporary Debug
       # ==========================================================================================
@@ -293,10 +293,10 @@ jobs:
         echo "REPO_NAME set to: $REPO_NAME"
     
         if [ "${{ matrix.os }}" == "macos-latest" ]; then
-          SOURCE_FILE="${{github.workspace}}/build/${REPO_NAME}MacInstaller.pkg"
+          SOURCE_FILE="${{github.workspace}}/build/${REPO_NAME}MacInstaller_${wPROJECT_VERSION}.pkg"
           echo "macOS build: SOURCE_FILE set to $SOURCE_FILE"
         elif [ "${{ matrix.os }}" == "windows-latest" ]; then
-          SOURCE_FILE="${{github.workspace}}/build/${REPO_NAME}WindowsInstaller.exe"
+          SOURCE_FILE="${{github.workspace}}/build/${REPO_NAME}WinInstaller_${wPROJECT_VERSION}.exe"
           echo "Windows build: SOURCE_FILE set to $SOURCE_FILE"
         else
           echo "Unsupported OS: ${{ matrix.os }}"
