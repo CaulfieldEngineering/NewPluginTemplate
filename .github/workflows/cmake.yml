@@ -170,10 +170,17 @@ jobs:
         cp ${{github.workspace}}/build/distribution.xml ${GITHUB_WORKSPACE}/build/output/distribution.xml
         echo "File 'distribution.xml' copied to build/output folder."
 
+        # Determine the suffix based on the version
+        SUFFIX=""
+        if [[ "${{ matrix.version }}" == "Demo" ]]; then
+          SUFFIX=".D"
+        fi
+
         productbuild \
           --distribution ${GITHUB_WORKSPACE}/build/output/distribution.xml \
           --package-path ${GITHUB_WORKSPACE}/build/output \
-          ${{github.workspace}}/build/${REPOSITORY_NAME}MacInstaller_${wPROJECT_VERSION}.pkg
+          ${{github.workspace}}/build/${REPOSITORY_NAME}MacInstaller_${wPROJECT_VERSION}${SUFFIX}.pkg
+      shell: bash
 
       # Temporary Debug
       # ==========================================================================================
