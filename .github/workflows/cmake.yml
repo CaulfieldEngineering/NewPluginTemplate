@@ -39,12 +39,11 @@ jobs:
     # ==========================================================================================
     - name: Configure CMake
       run: |
-        if [ "${{ matrix.version }}" == "Demo" ]; then
-          cmake -S . -B ${{github.workspace}}/build -DBUILD_DEMO=ON ${{ matrix.cmake_arch }} -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
-        else
-          cmake -S . -B ${{github.workspace}}/build -DBUILD_DEMO=OFF ${{ matrix.cmake_arch }} -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
-        fi
-      shell: bash
+        if: matrix.version == 'Demo'
+          cmake -S "${{github.workspace}}" -B "${{github.workspace}}/build" -DBUILD_DEMO=ON ${{ matrix.cmake_arch }} -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+       
+        if: matrix.version == 'Full'
+          cmake -S "${{github.workspace}}" -B "${{github.workspace}}/build" -DBUILD_DEMO=OFF ${{ matrix.cmake_arch }} -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
 
     # Compile Executables
     # ==========================================================================================
