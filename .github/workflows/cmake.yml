@@ -12,6 +12,7 @@ jobs:
       matrix:
         os: [macos-latest, windows-latest]
         build_type: [Release]
+        version: [Full, Demo]
         include:
           - os: windows-latest
             cmake_arch: -A x64
@@ -37,16 +38,17 @@ jobs:
     # Configure Projects
     # ==========================================================================================
     - name: Configure CMake
-      #run: cmake -S . -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
-      #run: cmake -S . -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} --debug-output -DCMAKE_VERBOSE_MAKEFILE=ON
-      run: cmake -S . -B ${{github.workspace}}/build ${{ matrix.cmake_arch }} -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+      run: |
+        if [ "${{ matrix.version }}" == "Demo" ]; then
+          cmake -S . -B ${{github.workspace}}/build -DBUILD_DEMO=ON ${{ matrix.cmake_arch }} -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+        else
+          cmake -S . -B ${{github.workspace}}/build -DBUILD_DEMO=OFF ${{ matrix.cmake_arch }} -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+        fi
 
     # Compile Executables
     # ==========================================================================================
     - name: Build
-      #run: cmake --build ${{github.workspace}}/build --config ${{ matrix.build_type }}
       run: cmake --build ${{github.workspace}}/build --config ${{ matrix.build_type }}
-
     # Gather project variables from config.cmake
     # ==========================================================================================
     - name: Extract and Set Configuration Variables
@@ -267,69 +269,6 @@ jobs:
       run: |
         ssh CaulfieldEngineering.com "echo 'SSH connection successful'"
 
-    # Debug File Location
-    # ==========================================================================================
-    # - name: Debug File Location
-    #   shell: bash
-    #   run: |
-    #     echo "Current working directory: $(pwd)"
-    #     echo "Contents of current directory:"
-    #     ls -R
-    #     echo "Contents of GITHUB_WORKSPACE:"
-    #     ls -R $GITHUB_WORKSPACE
-
-    # Upload Installers to Server (SCP)
-    # ==========================================================================================
-    # - name: Upload to Server (SCP)
-    #   shell: bash
-    #   run: |
-    #     set -x  # Enable debugging output
-        
-    #     echo "Starting upload process"
-    #     DEST_DIR="${{ matrix.os == 'windows-latest' && 'win' || 'mac' }}"
-    #     echo "DEST_DIR set to: $DEST_DIR"
-        
-    #     REPO_NAME=$(echo $GITHUB_REPOSITORY | awk -F / '{print $2}')
-    #     echo "REPO_NAME set to: $REPO_NAME"
-    
-    #     if [ "${{ matrix.os }}" == "macos-latest" ]; then
-    #       SOURCE_FILE="${{github.workspace}}/build/${REPO_NAME}MacInstaller_${wPROJECT_VERSION}.pkg"
-    #       echo "macOS build: SOURCE_FILE set to $SOURCE_FILE"
-    #     elif [ "${{ matrix.os }}" == "windows-latest" ]; then
-    #       SOURCE_FILE="${{github.workspace}}/build/${REPO_NAME}WinInstaller_${wPROJECT_VERSION}.exe"
-    #       echo "Windows build: SOURCE_FILE set to $SOURCE_FILE"
-    #     else
-    #       echo "Unsupported OS: ${{ matrix.os }}"
-    #       exit 1
-    #     fi
-    
-    #     DEST_PATH="CaulfieldEngineering.com:/home/caulfiel/public_html/plug-ins/${REPO_NAME}/uploads/${DEST_DIR}/"
-        
-    #     echo "Beginning SCP Transfer"
-    #     echo "Source file: $SOURCE_FILE"
-    #     echo "Destination path: $DEST_PATH"
-        
-    #     if [ -f "$SOURCE_FILE" ]; then
-    #       echo "Source file exists"
-    #     else
-    #       echo "Source file does not exist"
-    #       ls -l ${{github.workspace}}/build/
-    #       exit 1
-    #     fi
-        
-    #     SCP_COMMAND="scp -v \"$SOURCE_FILE\" \"$DEST_PATH\""
-        
-    #     echo "Executing SCP command: $SCP_COMMAND"
-        
-    #     if eval $SCP_COMMAND; then
-    #       echo "SCP command succeeded"
-    #     else
-    #       echo "SCP command failed with exit code $?"
-    #       exit 1
-    #     fi
-    
-    #     set +x  # Disable debugging output
-
 
     # Upload Installers to Server (SCP)
     # ==========================================================================================
@@ -346,10 +285,10 @@ jobs:
         echo "REPO_NAME set to: $REPO_NAME"
 
         if [ "${{ matrix.os }}" == "macos-latest" ]; then
-          SOURCE_FILE="${{github.workspace}}/build/${REPO_NAME}MacInstaller_${wPROJECT_VERSION}.pkg"
+          SOURCE_FILE="${{github.workspace}}/build/${REPO_NAME}MacInstaller_${wPROJECT_VERSION}${{ matrix.version == 'Demo' && '.D' || '' }}.pkg"
           echo "macOS build: SOURCE_FILE set to $SOURCE_FILE"
         elif [ "${{ matrix.os }}" == "windows-latest" ]; then
-          SOURCE_FILE="${{github.workspace}}/build/${REPO_NAME}WinInstaller_${wPROJECT_VERSION}.exe"
+          SOURCE_FILE="${{github.workspace}}/build/${REPO_NAME}WinInstaller_${wPROJECT_VERSION}${{ matrix.version == 'Demo' && '.D' || '' }}.exe"
           echo "Windows build: SOURCE_FILE set to $SOURCE_FILE"
         else
           echo "Unsupported OS: ${{ matrix.os }}"

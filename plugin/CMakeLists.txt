@@ -22,6 +22,17 @@ juce_add_plugin( ${PROJECT_NAME}
     PRODUCT_NAME ${wPLUGIN_NAME}
 )
 
+# Pre-Processor Directive for Demo vs. Full Version
+# =====================================================================
+if (BUILD_DEMO)
+    add_definitions(-DDEMO_VERSION)
+    # Include demo-specific files, exclude features, etc.
+    message(STATUS "Configuring Demo Version")
+else()
+    # Full version configurations
+    message(STATUS "Configuring Full Version")
+endif()
+
 
 # Run the Python script to generate the file list
 # =====================================================================

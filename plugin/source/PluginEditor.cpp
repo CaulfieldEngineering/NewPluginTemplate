@@ -21,8 +21,16 @@ namespace audio_plugin {
 
     g.setColour(juce::Colours::white);
     g.setFont(15.0f);
-    g.drawFittedText("Hello World!", getLocalBounds(),
-                    juce::Justification::centred, 1);
+
+    #ifdef DEMO_VERSION
+        g.drawFittedText("Hello World! - Demo Version!", getLocalBounds(),
+                        juce::Justification::centred, 1);
+    #else
+       g.drawFittedText("Hello World!", getLocalBounds(),
+                        juce::Justification::centred, 1);
+    #endif
+
+
     }
 
     void AudioPluginAudioProcessorEditor::resized() {
