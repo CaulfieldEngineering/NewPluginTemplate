@@ -44,6 +44,7 @@ jobs:
         else
           cmake -S . -B ${{github.workspace}}/build -DBUILD_DEMO=OFF ${{ matrix.cmake_arch }} -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
         fi
+      shell: bash
 
     # Compile Executables
     # ==========================================================================================
