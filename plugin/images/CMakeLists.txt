@@ -1,3 +1,3 @@
-#juce_add_binary_data(${PROJECT_NAME}BinaryData SOURCES
-
-#)
+juce_add_binary_data(${PROJECT_NAME}BinaryData SOURCES
+	CompanyTitle.png
+)
