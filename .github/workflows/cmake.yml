@@ -7,7 +7,12 @@ on:
     branches: [ "main" ]
 
 jobs:
+
+  # Job: Build
+  # ==========================================================================================
+  # ==========================================================================================
   build:
+
     strategy:
       matrix:
         os: [macos-latest, windows-latest]
@@ -21,9 +26,19 @@ jobs:
 
     runs-on: ${{ matrix.os }}
 
+    # CMAKE BUILD #################################################################################################################
+    # =============================================================================================================================
+    # =============================================================================================================================
+    # =============================================================================================================================
+
+
+    # Checkout Code
+    # ==========================================================================================
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+
+
 
     # Cache Dependencies
     # ==========================================================================================
@@ -34,6 +49,7 @@ jobs:
     #     path: | 
     #       ${{github.workspace}}/libs
     #     key: libs
+
 
     # Configure Projects
     # ==========================================================================================
@@ -49,10 +65,13 @@ jobs:
         fi
       shell: bash
 
+
     # Compile Executables
     # ==========================================================================================
     - name: Build
       run: cmake --build ${{github.workspace}}/build --config ${{ matrix.build_type }}
+
+
     # Gather project variables from config.cmake
     # ==========================================================================================
     - name: Extract and Set Configuration Variables
@@ -65,6 +84,8 @@ jobs:
         done < <(grep 'set(w' ${GITHUB_WORKSPACE}/config.cmake | sed -e 's/set(//g' -e 's/)//g' -e 's/\s\+/ /g')
       shell: bash
       
+
+
       # Debug; print project variables
       # ==========================================================================================
     - name: Use Variables
@@ -79,6 +100,13 @@ jobs:
         echo "Needs MIDI Output: $wNEEDS_MIDI_OUTPUT"
         echo "Plugin Code: $wPLUGIN_CODE"
 
+
+    # WIN INSTALLER ###############################################################################################################
+    # =============================================================================================================================
+    # =============================================================================================================================
+    # =============================================================================================================================
+
+
     # Install Inno Setup (Windows Only)
     # ==========================================================================================
     - name: Install Inno Setup (Windows Only)
@@ -91,12 +119,6 @@ jobs:
     # ==========================================================================================
 
 
-
-    # Sign Payload (Mac)
-    # ==========================================================================================
-
-
-
     # Compile Inno Setup script (Windows Only)
     # ==========================================================================================
     - name: Compile Inno Setup script (Windows Only)
@@ -106,13 +128,85 @@ jobs:
       shell: pwsh
 
 
- 
 
+    # MAC INSTALLER ###############################################################################################################
+    # =============================================================================================================================
+    # =============================================================================================================================
+    # =============================================================================================================================
 
+    # Sign Payload (Mac) - 2024.10.25.
+    # ==========================================================================================
+    - name: Sign Mac Binaries
+      if: matrix.os == 'macos-latest'
+      env:
+        APPLICATION_CERTIFICATE_BASE64: ${{ secrets.MAC_APPLICATION_CERTIFICATE_BASE64 }}
+        CERTIFICATE_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+        KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        REPOSITORY_NAME: ${{ github.event.repository.name }}
+      run: |
+        # Check for required secrets
+        if [ -z "$APPLICATION_CERTIFICATE_BASE64" ] || [ -z "$CERTIFICATE_PASSWORD" ] || [ -z "$KEYCHAIN_PASSWORD" ]; then
+          echo "Required secrets for application signing are not set. Skipping application signing step."
+          exit 0
+        fi
 
+        echo "Starting the signing process for macOS binaries..."
 
+        # Create temporary keychain
+        # ====================================
+        KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+        security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+        security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+        security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
+        # Import certificate to keychain
+        # ====================================
+        echo -n "$APPLICATION_CERTIFICATE_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+        security import "$RUNNER_TEMP/cert.p12" -P "$CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+        security list-keychains -d user -s "$KEYCHAIN_PATH"
+        security default-keychain -s "$KEYCHAIN_PATH"
+        
+        # Add certificate to partition list
+        # ====================================
+        security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
+        echo "Signing VST3 bundle..."
+        # ====================================
+        VST3_PATH="${GITHUB_WORKSPACE}/build/plugin/${REPOSITORY_NAME}_artefacts/Release/VST3/${REPOSITORY_NAME}.vst3"
+        codesign --force \
+          --sign "Developer ID Application" \
+          --verbose \
+          --deep --strict --options=runtime --timestamp \
+          "$VST3_PATH"
+
+        echo "Verifying VST3 signature..."
+        # ====================================
+        codesign --verify --deep --verbose=2 "$VST3_PATH"
+        # Only verify code signature, skip notarization check
+        codesign --display --verbose=2 "$VST3_PATH"
+
+        echo "Signing standalone application..."
+        # ====================================
+        APP_PATH="${GITHUB_WORKSPACE}/build/plugin/${REPOSITORY_NAME}_artefacts/Release/Standalone/${REPOSITORY_NAME}.app"
+        codesign --force \
+          --sign "Developer ID Application" \
+          --verbose \
+          --deep --strict --options=runtime --timestamp \
+          "$APP_PATH"
+
+        echo "Verifying standalone application signature..."
+        # ====================================
+        codesign --verify --deep --verbose=2 "$APP_PATH"
+        # Only verify code signature, skip notarization check
+        codesign --display --verbose=2 "$APP_PATH"
+
+        # Clean up
+        # ====================================
+        security default-keychain -s login.keychain
+        security delete-keychain "$KEYCHAIN_PATH"
+        rm "$RUNNER_TEMP/cert.p12"
+
+        echo "Signing process completed successfully."
 
 
     # Package: Standalone (Mac)
@@ -122,42 +216,186 @@ jobs:
       env:
         REPOSITORY_NAME: ${{ github.event.repository.name }}
       run: |
+        # Create output directory
         mkdir -p ${GITHUB_WORKSPACE}/build/output
     
         # Format COMPANY_NAME by removing spaces
         FORMATTED_COMPANY_NAME=$(echo "$wCOMPANY_NAME" | tr -d ' ')
 
-        echo "Using formatted company name: $FORMATTED_COMPANY_NAME"
-        echo "Using version: $VERSION"
+        # Determine the suffix based on the version
+        SUFFIX=""
+        if [[ "${{ matrix.version }}" == "Demo" ]]; then
+          SUFFIX=".D"
+        fi
+
+        # Define paths
+        APP_PATH="${GITHUB_WORKSPACE}/build/plugin/${REPOSITORY_NAME}_artefacts/Release/Standalone/${REPOSITORY_NAME}.app"
+        PKG_PATH="${GITHUB_WORKSPACE}/build/output/${REPOSITORY_NAME}_Standalone_${wPROJECT_VERSION}${SUFFIX}.pkg"
+
+        echo "Checking for standalone app before packaging..."
+        if [ ! -d "$APP_PATH" ]; then
+          echo "ERROR: Standalone app not found at: $APP_PATH"
+          echo "Contents of $(dirname "$APP_PATH"):"
+          ls -la "$(dirname "$APP_PATH")"
+          exit 1
+        fi
+
+        echo "✓ Found standalone app at: $APP_PATH"
+        echo "Creating standalone package..."
 
         pkgbuild \
-          --root "${GITHUB_WORKSPACE}/build/plugin/${REPOSITORY_NAME}_artefacts/Release/Standalone" \
-          --identifier com.${FORMATTED_COMPANY_NAME}.${REPOSITORY_NAME}.vst3 \
-          --version $wPROJECT_VERSION \
-          --install-location /Applications/${REPOSITORY_NAME} \
-          ${GITHUB_WORKSPACE}/build/output/${REPOSITORY_NAME}_Standalone.pkg
-  
-      # Package: VST3 (Mac)
-      # ==========================================================================================
+          --root "$(dirname "$APP_PATH")" \
+          --identifier "com.${FORMATTED_COMPANY_NAME}.${REPOSITORY_NAME}.app" \
+          --version "$wPROJECT_VERSION" \
+          --install-location "/Applications/${REPOSITORY_NAME}" \
+          "$PKG_PATH"
+
+        # Verify package was created and is not empty
+        if [ ! -f "$PKG_PATH" ]; then
+          echo "ERROR: Package was not created at: $PKG_PATH"
+          exit 1
+        fi
+
+        if [ ! -s "$PKG_PATH" ]; then
+          echo "ERROR: Created package is empty: $PKG_PATH"
+          exit 1
+        fi
+
+        echo "✓ Successfully created standalone package at: $PKG_PATH"
+        
+
+    # Package: VST3 (Mac)
+    # ==========================================================================================
     - name: Create VST3 Package (Mac Only)
       if: matrix.os == 'macos-latest'
       env:
         REPOSITORY_NAME: ${{ github.event.repository.name }}
       run: |
+        # Create output directory
         mkdir -p ${GITHUB_WORKSPACE}/build/output
 
         # Format COMPANY_NAME by removing spaces
         FORMATTED_COMPANY_NAME=$(echo "$wCOMPANY_NAME" | tr -d ' ')
 
-        echo "Using formatted company name: $FORMATTED_COMPANY_NAME"
-        echo "Using version: $VERSION"
+        # Determine the suffix based on the version
+        SUFFIX=""
+        if [[ "${{ matrix.version }}" == "Demo" ]]; then
+          SUFFIX=".D"
+        fi
+
+        # Define paths
+        VST3_PATH="${GITHUB_WORKSPACE}/build/plugin/${REPOSITORY_NAME}_artefacts/Release/VST3/${REPOSITORY_NAME}.vst3"
+        PKG_PATH="${GITHUB_WORKSPACE}/build/output/${REPOSITORY_NAME}_VST3_${wPROJECT_VERSION}${SUFFIX}.pkg"
+
+        echo "Checking for VST3 bundle before packaging..."
+        if [ ! -d "$VST3_PATH" ]; then
+          echo "ERROR: VST3 bundle not found at: $VST3_PATH"
+          echo "Contents of $(dirname "$VST3_PATH"):"
+          ls -la "$(dirname "$VST3_PATH")"
+          exit 1
+        fi
+
+        echo "✓ Found VST3 bundle at: $VST3_PATH"
+        echo "Creating VST3 package..."
 
         pkgbuild \
-          --root "${GITHUB_WORKSPACE}/build/plugin/${REPOSITORY_NAME}_artefacts/Release/VST3" \
-          --identifier com.${FORMATTED_COMPANY_NAME}.${REPOSITORY_NAME}.vst3 \
-          --version $wPROJECT_VERSION \
-          --install-location /Library/Audio/Plug-Ins/VST3 \
-          ${GITHUB_WORKSPACE}/build/output/${REPOSITORY_NAME}_VST3.pkg
+          --root "$(dirname "$VST3_PATH")" \
+          --identifier "com.${FORMATTED_COMPANY_NAME}.${REPOSITORY_NAME}.vst3" \
+          --version "$wPROJECT_VERSION" \
+          --install-location "/Library/Audio/Plug-Ins/VST3" \
+          "$PKG_PATH"
+
+        # Verify package was created and is not empty
+        if [ ! -f "$PKG_PATH" ]; then
+          echo "ERROR: Package was not created at: $PKG_PATH"
+          exit 1
+        fi
+
+        if [ ! -s "$PKG_PATH" ]; then
+          echo "ERROR: Created package is empty: $PKG_PATH"
+          exit 1
+        fi
+
+        echo "✓ Successfully created VST3 package at: $PKG_PATH"
+          
+
+    # Sign Individual Packages (Mac) - 2024.10.25 CLAUDE
+    # ==========================================================================================
+    - name: Sign Individual Packages
+      if: matrix.os == 'macos-latest'
+      env:
+        INSTALLER_CERTIFICATE_BASE64: ${{ secrets.MAC_INSTALLER_CERTIFICATE_BASE64 }}
+        CERTIFICATE_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+        KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        REPOSITORY_NAME: ${{ github.event.repository.name }}
+      run: |
+        # Check for required secrets
+        if [ -z "$INSTALLER_CERTIFICATE_BASE64" ] || [ -z "$CERTIFICATE_PASSWORD" ] || [ -z "$KEYCHAIN_PASSWORD" ]; then
+          echo "Required secrets for installer signing are not set. Skipping installer signing step."
+          exit 0
+        fi
+
+        echo "Starting the package signing process..."
+
+        # Create temporary keychain
+        # ====================================
+        KEYCHAIN_PATH=$RUNNER_TEMP/pkg-signing.keychain-db
+        security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+        security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+        security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+        # Import certificate to keychain
+        # ====================================
+        echo -n "$INSTALLER_CERTIFICATE_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+        security import "$RUNNER_TEMP/cert.p12" -P "$CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+        security list-keychains -d user -s "$KEYCHAIN_PATH"
+        security default-keychain -s "$KEYCHAIN_PATH"
+        
+        # Add certificate to partition list
+        # ====================================
+        security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+        # Determine the suffix based on the version
+        SUFFIX=""
+        if [[ "${{ matrix.version }}" == "Demo" ]]; then
+          SUFFIX=".D"
+        fi
+
+        echo "Signing standalone package..."
+        # ====================================
+        STANDALONE_PKG="${GITHUB_WORKSPACE}/build/output/${REPOSITORY_NAME}_Standalone_${wPROJECT_VERSION}${SUFFIX}.pkg"
+        productsign --sign "Developer ID Installer" \
+          "$STANDALONE_PKG" \
+          "${STANDALONE_PKG%.pkg}_signed.pkg"
+
+        echo "Verifying standalone package signature..."
+        # ====================================
+        pkgutil --check-signature "${STANDALONE_PKG%.pkg}_signed.pkg"
+
+        echo "Signing VST3 package..."
+        # ====================================
+        VST3_PKG="${GITHUB_WORKSPACE}/build/output/${REPOSITORY_NAME}_VST3_${wPROJECT_VERSION}${SUFFIX}.pkg"
+        productsign --sign "Developer ID Installer" \
+          "$VST3_PKG" \
+          "${VST3_PKG%.pkg}_signed.pkg"
+
+        echo "Verifying VST3 package signature..."
+        # ====================================
+        pkgutil --check-signature "${VST3_PKG%.pkg}_signed.pkg"
+
+        # Replace unsigned with signed packages
+        # ====================================
+        mv "${STANDALONE_PKG%.pkg}_signed.pkg" "$STANDALONE_PKG"
+        mv "${VST3_PKG%.pkg}_signed.pkg" "$VST3_PKG"
+
+        # Clean up
+        # ====================================
+        security default-keychain -s login.keychain
+        security delete-keychain "$KEYCHAIN_PATH"
+        rm "$RUNNER_TEMP/cert.p12"
+
+        echo "Package signing process completed successfully."
+
 
     # Package: Distribution (Mac)
     # ==========================================================================================
@@ -167,8 +405,89 @@ jobs:
         REPOSITORY_NAME: ${{ github.event.repository.name }}
       run: |
         mkdir -p ${GITHUB_WORKSPACE}/build/output
-        cp ${{github.workspace}}/build/distribution.xml ${GITHUB_WORKSPACE}/build/output/distribution.xml
-        echo "File 'distribution.xml' copied to build/output folder."
+
+        # Determine the suffix and distribution file based on the version
+        SUFFIX=""
+        DIST_FILE="distribution-full.xml"
+        
+        if [[ "${{ matrix.version }}" == "Demo" ]]; then
+          SUFFIX=".D"
+          DIST_FILE="distribution-demo.xml"
+        fi
+
+        # Copy the appropriate distribution file
+        echo "Using distribution file: $DIST_FILE"
+        if [ ! -f "${{github.workspace}}/build/$DIST_FILE" ]; then
+          echo "ERROR: Distribution file not found: $DIST_FILE"
+          echo "Contents of build directory:"
+          ls -la ${{github.workspace}}/build/
+          exit 1
+        fi
+
+        # Copy and verify
+        cp "${{github.workspace}}/build/$DIST_FILE" "${GITHUB_WORKSPACE}/build/output/distribution.xml"
+        if [ ! -f "${GITHUB_WORKSPACE}/build/output/distribution.xml" ]; then
+          echo "ERROR: Failed to copy distribution file"
+          exit 1
+        fi
+        echo "✓ Distribution file copied successfully"
+
+        # Verify package path contains our packages
+        echo "Checking for component packages..."
+        ls -la ${GITHUB_WORKSPACE}/build/output/*.pkg
+        
+        echo "Creating distribution package..."
+        productbuild \
+          --distribution "${GITHUB_WORKSPACE}/build/output/distribution.xml" \
+          --package-path "${GITHUB_WORKSPACE}/build/output" \
+          "${{github.workspace}}/build/${REPOSITORY_NAME}MacInstaller_${wPROJECT_VERSION}${SUFFIX}.pkg"
+
+        # Verify the final package was created
+        if [ ! -f "${{github.workspace}}/build/${REPOSITORY_NAME}MacInstaller_${wPROJECT_VERSION}${SUFFIX}.pkg" ]; then
+          echo "ERROR: Failed to create distribution package"
+          exit 1
+        fi
+        
+        echo "✓ Distribution package created successfully"
+        
+      shell: bash
+
+
+    # Sign Distribution Package (Mac)
+    # ==========================================================================================
+    - name: Sign Distribution Package
+      if: matrix.os == 'macos-latest'
+      env:
+        INSTALLER_CERTIFICATE_BASE64: ${{ secrets.MAC_INSTALLER_CERTIFICATE_BASE64 }}
+        CERTIFICATE_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+        KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        REPOSITORY_NAME: ${{ github.event.repository.name }}
+      run: |
+        # Check for required secrets
+        if [ -z "$INSTALLER_CERTIFICATE_BASE64" ] || [ -z "$CERTIFICATE_PASSWORD" ] || [ -z "$KEYCHAIN_PASSWORD" ]; then
+          echo "Required secrets for installer signing are not set. Skipping installer signing step."
+          exit 0
+        fi
+
+        echo "Starting the distribution package signing process..."
+
+        # Create temporary keychain
+        # ====================================
+        KEYCHAIN_PATH=$RUNNER_TEMP/dist-signing.keychain-db
+        security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+        security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+        security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+        # Import certificate to keychain
+        # ====================================
+        echo -n "$INSTALLER_CERTIFICATE_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+        security import "$RUNNER_TEMP/cert.p12" -P "$CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+        security list-keychains -d user -s "$KEYCHAIN_PATH"
+        security default-keychain -s "$KEYCHAIN_PATH"
+        
+        # Add certificate to partition list
+        # ====================================
+        security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
         # Determine the suffix based on the version
         SUFFIX=""
@@ -176,18 +495,151 @@ jobs:
           SUFFIX=".D"
         fi
 
-        productbuild \
-          --distribution ${GITHUB_WORKSPACE}/build/output/distribution.xml \
-          --package-path ${GITHUB_WORKSPACE}/build/output \
-          ${{github.workspace}}/build/${REPOSITORY_NAME}MacInstaller_${wPROJECT_VERSION}${SUFFIX}.pkg
-      shell: bash
+        # Sign the distribution package
+        UNSIGNED_PKG="${GITHUB_WORKSPACE}/build/${REPOSITORY_NAME}MacInstaller_${wPROJECT_VERSION}${SUFFIX}.pkg"
+        SIGNED_PKG="${GITHUB_WORKSPACE}/build/${REPOSITORY_NAME}MacInstaller_${wPROJECT_VERSION}${SUFFIX}_signed.pkg"
 
-      # Temporary Debug
-      # ==========================================================================================
-    # - name: Debug - List Build Directory Contents
-    #   run: |
-    #     echo "Listing contents of ${GITHUB_WORKSPACE}/build:"
-    #     ls -R ${GITHUB_WORKSPACE}/build
+        echo "Signing distribution package..."
+        productsign --sign "Developer ID Installer" \
+          "$UNSIGNED_PKG" \
+          "$SIGNED_PKG"
+
+        # Verify the signature
+        echo "Verifying package signature..."
+        pkgutil --check-signature "$SIGNED_PKG"
+
+        # Replace unsigned with signed package
+        mv "$SIGNED_PKG" "$UNSIGNED_PKG"
+
+        # Clean up
+        security default-keychain -s login.keychain
+        security delete-keychain "$KEYCHAIN_PATH"
+        rm "$RUNNER_TEMP/cert.p12"
+
+        echo "Distribution package signing completed successfully."
+
+
+    # Notarize the Distribution Package (Mac) - 2024.10.25 CLAUDE
+    # ==========================================================================================
+    - name: Notarize Mac Distribution Package
+      if: matrix.os == 'macos-latest'
+      env:
+        APPLE_ID: ${{ secrets.APPLE_ID }}
+        APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        REPOSITORY_NAME: ${{ github.event.repository.name }}
+      run: |
+        # Check for required secrets
+        if [ -z "$APPLE_ID" ] || [ -z "$APPLE_TEAM_ID" ] || [ -z "$APPLE_APP_SPECIFIC_PASSWORD" ]; then
+          echo "Required secrets for notarization are not set. Skipping notarization step."
+          exit 0
+        fi
+
+        echo "Starting the notarization process..."
+
+        # Determine the suffix based on the version
+        SUFFIX=""
+        if [[ "${{ matrix.version }}" == "Demo" ]]; then
+          SUFFIX=".D"
+        fi
+
+        # Store the installer path
+        INSTALLER_PATH="${GITHUB_WORKSPACE}/build/${REPOSITORY_NAME}MacInstaller_${wPROJECT_VERSION}${SUFFIX}.pkg"
+
+        # Create temporary keychain for notarization
+        xcrun notarytool store-credentials "notarytool-profile" \
+          --apple-id "$APPLE_ID" \
+          --team-id "$APPLE_TEAM_ID" \
+          --password "$APPLE_APP_SPECIFIC_PASSWORD"
+
+        # Submit for notarization and capture the submission ID
+        echo "Submitting for notarization..."
+        SUBMISSION_RESPONSE=$(xcrun notarytool submit "$INSTALLER_PATH" --keychain-profile "notarytool-profile")
+        SUBMISSION_ID=$(echo "$SUBMISSION_RESPONSE" | grep "id:" | head -n 1 | awk '{print $2}')
+
+        if [ -z "$SUBMISSION_ID" ]; then
+          echo "Failed to get submission ID"
+          echo "Full submission response: $SUBMISSION_RESPONSE"
+          exit 1
+        fi
+
+        echo "Captured Submission ID: $SUBMISSION_ID"
+
+        # Add a timeout counter
+        ATTEMPTS=0
+        MAX_ATTEMPTS=30  # 15 minutes maximum (30 * 30 seconds)
+
+        # Wait and check status
+        while [ $ATTEMPTS -lt $MAX_ATTEMPTS ]; do
+          echo "Checking status for submission ID: $SUBMISSION_ID"
+          STATUS_RESPONSE=$(xcrun notarytool info "$SUBMISSION_ID" --keychain-profile "notarytool-profile")
+          echo "Full status response: $STATUS_RESPONSE"
+          
+          STATUS=$(echo "$STATUS_RESPONSE" | grep "status:" | awk '{print $2}')
+          echo "Parsed status: $STATUS"
+          
+          if [ "$STATUS" = "Accepted" ]; then
+            echo "Notarization successful!"
+            break
+          elif [ "$STATUS" = "Invalid" ] || [ "$STATUS" = "Rejected" ]; then
+            echo "Notarization failed with status: $STATUS"
+            xcrun notarytool log "$SUBMISSION_ID" --keychain-profile "notarytool-profile"
+            exit 1
+          fi
+          
+          ATTEMPTS=$((ATTEMPTS + 1))
+          if [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; then
+            echo "Timeout waiting for notarization after 15 minutes"
+            exit 1
+          fi
+          
+          echo "Waiting for notarization to complete... (Attempt $ATTEMPTS of $MAX_ATTEMPTS)"
+          sleep 30
+        done
+
+        # Show notarization history for debugging
+        xcrun notarytool history --keychain-profile "notarytool-profile"
+        
+    # Staple the Notarization Ticket to Distribution Package (Mac) - 2024.10.25 CLAUDE
+    # ==========================================================================================
+    - name: Staple Notarization Ticket
+      if: matrix.os == 'macos-latest'
+      env:
+        REPOSITORY_NAME: ${{ github.event.repository.name }}
+        APPLE_ID: ${{ secrets.APPLE_ID }}  # Used to check if notarization was run
+      run: |
+        # Check if notarization was meant to run
+        if [ -z "$APPLE_ID" ]; then
+          echo "Notarization credentials not set. Skipping stapling step."
+          exit 0
+        fi
+    
+        # Determine the suffix based on the version
+        SUFFIX=""
+        if [[ "${{ matrix.version }}" == "Demo" ]]; then
+          SUFFIX=".D"
+        fi
+    
+        # Store the installer path
+        INSTALLER_PATH="${GITHUB_WORKSPACE}/build/${REPOSITORY_NAME}MacInstaller_${wPROJECT_VERSION}${SUFFIX}.pkg"
+    
+        echo "Stapling notarization ticket to installer..."
+        xcrun stapler staple "$INSTALLER_PATH"
+    
+        echo "Validating stapled installer..."
+        xcrun stapler validate "$INSTALLER_PATH"
+    
+        # Additional verification
+        spctl --assess --type install "$INSTALLER_PATH"
+    
+        echo "Stapling process completed successfully."
+
+
+    # BACKUP TO SERVER ############################################################################################################
+    # =============================================================================================================================
+    # =============================================================================================================================
+    # =============================================================================================================================
+
 
     # Print build folder contents
     # ==========================================================================================
@@ -198,37 +650,13 @@ jobs:
       shell: pwsh
 
 
-
-
-
-
-
-    # Sign Installer (Win)
-    # ==========================================================================================
-
-
-
-    # Sign Installer (Mac)
-    # ==========================================================================================
-
-
-    # Notarize the Installer (Mac)
-    # ==========================================================================================
-
-
-
-    # Staple the Notarization Ticket (Mac)
-    # ==========================================================================================
-
-
-
-
     # Setup SSH
     # ==========================================================================================
     - name: Setup SSH
       uses: webfactory/ssh-agent@v0.5.3
       with:
         ssh-private-key: ${{ secrets.ID_GITHUB }}
+
 
     # Add Host Key (Windows)
     # ==========================================================================================
@@ -241,6 +669,7 @@ jobs:
         }
         ssh-keyscan -p 7822 CaulfieldEngineering.com | Out-File -Append -Encoding ascii $HOME/.ssh/known_hosts
 
+
     # Add Host Key (macOS)
     # ==========================================================================================
     - name: Add Host Key (macOS)
@@ -248,6 +677,7 @@ jobs:
       run: |
         mkdir -p ~/.ssh
         ssh-keyscan -p 7822 CaulfieldEngineering.com >> ~/.ssh/known_hosts
+
 
     # Create SSH Configuration
     # ==========================================================================================
@@ -262,6 +692,7 @@ jobs:
           MACs hmac-sha2-256
           StrictHostKeyChecking no" > ~/.ssh/config
 
+
     # Verify SSH Key and Connection
     # ==========================================================================================
     - name: Verify SSH Key and Connection
@@ -273,77 +704,348 @@ jobs:
         echo "Attempting SSH connection:"
         ssh -vvv CaulfieldEngineering.com exit
 
+
     # Debug SSH Connection
-    # ==========================================================================================
-    - name: Debug SSH Connection
-      shell: bash
-      run: |
-        ssh CaulfieldEngineering.com "echo 'SSH connection successful'"
-
-
-    # Upload Installers to Server (SCP)
     # ==========================================================================================
     - name: Upload to Server (SCP)
       shell: bash
       run: |
         set -x  # Enable debugging output
-
+    
+        # Begin the upload process
         echo "Starting upload process"
-        DEST_DIR="${{ matrix.os == 'windows-latest' && 'win' || 'mac' }}"
+    
+        # Set the destination directory to the version number (e.g., v1.0.0)
+        DEST_DIR="v${wPROJECT_VERSION}"
         echo "DEST_DIR set to: $DEST_DIR"
-
+    
+        # Extract the repository name from the GitHub repository environment variable
         REPO_NAME=$(echo $GITHUB_REPOSITORY | awk -F / '{print $2}')
         echo "REPO_NAME set to: $REPO_NAME"
-
+    
+        # Determine the source file based on the operating system
         if [ "${{ matrix.os }}" == "macos-latest" ]; then
+          # macOS: Set the source file path for macOS installer
           SOURCE_FILE="${{github.workspace}}/build/${REPO_NAME}MacInstaller_${wPROJECT_VERSION}${{ matrix.version == 'Demo' && '.D' || '' }}.pkg"
           echo "macOS build: SOURCE_FILE set to $SOURCE_FILE"
         elif [ "${{ matrix.os }}" == "windows-latest" ]; then
+          # Windows: Set the source file path for Windows installer
           SOURCE_FILE="${{github.workspace}}/build/${REPO_NAME}WinInstaller_${wPROJECT_VERSION}${{ matrix.version == 'Demo' && '.D' || '' }}.exe"
           echo "Windows build: SOURCE_FILE set to $SOURCE_FILE"
         else
+          # Unsupported OS error
           echo "Unsupported OS: ${{ matrix.os }}"
           exit 1
         fi
-
+    
+        # Define the destination path on the remote server where files will be uploaded
         DEST_PATH="/home/caulfiel/public_html/plug-ins/${REPO_NAME}/uploads/${DEST_DIR}/"
         SERVER="CaulfieldEngineering.com"
         SSH_COMMAND="ssh $SERVER"
-
-        echo "Checking if destination directory exists on the server"
+    
+        # Check if the version-specific directory exists on the server
+        echo "Checking if destination version directory exists on the server"
         if eval "$SSH_COMMAND 'test -d $DEST_PATH'"; then
-          echo "Directory exists: $DEST_PATH"
+          echo "Version directory exists: $DEST_PATH"
         else
-          echo "Directory does not exist, creating directory: $DEST_PATH"
+          # Create the version-specific directory if it does not exist
+          echo "Version directory does not exist, creating directory: $DEST_PATH"
           if eval "$SSH_COMMAND 'mkdir -p $DEST_PATH'"; then
-            echo "Directory created successfully"
+            echo "Version directory created successfully"
           else
-            echo "Failed to create directory: $DEST_PATH"
+            echo "Failed to create version directory: $DEST_PATH"
             exit 1
           fi
         fi
-
-        echo "Beginning SCP Transfer"
-        echo "Source file: $SOURCE_FILE"
-        echo "Destination path: $SERVER:$DEST_PATH"
-
+    
+        # Check if the source file exists before attempting the upload
         if [ -f "$SOURCE_FILE" ]; then
           echo "Source file exists"
         else
           echo "Source file does not exist"
+          # List the files in the build directory to help debug
           ls -l ${{github.workspace}}/build/
           exit 1
         fi
-
+    
+        # Begin the SCP transfer to upload the file to the server
         SCP_COMMAND="scp -v \"$SOURCE_FILE\" \"$SERVER:$DEST_PATH\""
-
         echo "Executing SCP command: $SCP_COMMAND"
-
+    
         if eval $SCP_COMMAND; then
           echo "SCP command succeeded"
         else
           echo "SCP command failed with exit code $?"
           exit 1
         fi
+    
+        # Disable debugging output
+        set +x  
 
-        set +x  # Disable debugging output
+
+    # UPDATE WORDPRESS ############################################################################################################
+    # =============================================================================================================================
+    # =============================================================================================================================
+    # =============================================================================================================================
+
+
+    # Upload Installers to WordPress Media Library
+    # ==========================================================================================
+    - name: Upload Installers to WordPress
+      env:
+        WORDPRESS_USERNAME: ${{ secrets.WORDPRESS_USERNAME }}
+        WORDPRESS_APPLICATION_PASSWORD: ${{ secrets.WORDPRESS_APPLICATION_PASSWORD }}
+        WORDPRESS_SITE: ${{ secrets.WORDPRESS_SITE }}
+      shell: bash
+      run: |
+        set -e  # Exit immediately if any command exits with a non-zero status
+
+        # Function to URL encode a string
+        urlencode() {
+          local string="${1}"
+          local strlen=${#string}
+          local encoded=""
+          local pos c o
+          for (( pos=0 ; pos<strlen ; pos++ )); do
+            c=${string:$pos:1}
+            case "$c" in
+              [-_.~a-zA-Z0-9]) o="${c}" ;;
+              *) printf -v o '%%%02x' "'$c"
+            esac
+            encoded+="${o}"
+          done
+          echo "${encoded}"
+        }
+
+        # Check if WordPress credentials are set
+        if [ -z "$WORDPRESS_USERNAME" ] || [ -z "$WORDPRESS_APPLICATION_PASSWORD" ] || [ -z "$WORDPRESS_SITE" ]; then
+          echo "WordPress credentials not set. Skipping WordPress upload step."
+          exit 0
+        fi
+
+        # Extract repository name and set version-specific variables
+        REPO_NAME=$(echo $GITHUB_REPOSITORY | awk -F / '{print $2}')
+        
+        # Correctly evaluate matrix.version
+        if [ "${{ matrix.version }}" == "Demo" ]; then
+          IS_DEMO=true
+          SUFFIX=".D"
+        else
+          IS_DEMO=false
+          SUFFIX=""
+        fi
+
+        # Set file paths and titles based on OS and version
+        if [ "${{ matrix.os }}" == "macos-latest" ]; then
+          FILE_PATH="${GITHUB_WORKSPACE}/build/${REPO_NAME}MacInstaller_${wPROJECT_VERSION}${SUFFIX}.pkg"
+          if [ "$IS_DEMO" == true ]; then
+            FILE_TITLE="Tertiary Demo Installer v${wPROJECT_VERSION}${SUFFIX} for Mac"
+          else
+            FILE_TITLE="Tertiary Installer v${wPROJECT_VERSION}${SUFFIX} for Mac"
+          fi
+          FILE_NAME="${REPO_NAME}MacInstaller_${wPROJECT_VERSION}${SUFFIX}.pkg"
+        elif [ "${{ matrix.os }}" == "windows-latest" ]; then
+          FILE_PATH="${GITHUB_WORKSPACE}/build/${REPO_NAME}WinInstaller_${wPROJECT_VERSION}${SUFFIX}.exe"
+          if [ "$IS_DEMO" == true ]; then
+            FILE_TITLE="Tertiary Demo Installer v${wPROJECT_VERSION}${SUFFIX} for Windows"
+          else
+            FILE_TITLE="Tertiary Installer v${wPROJECT_VERSION}${SUFFIX} for Windows"
+          fi
+          FILE_NAME="${REPO_NAME}WinInstaller_${wPROJECT_VERSION}${SUFFIX}.exe"
+        else
+          echo "Unsupported OS for WordPress upload"
+          exit 1
+        fi
+
+        # Check if file exists
+        if [ ! -f "$FILE_PATH" ]; then
+          echo "File not found: $FILE_PATH"
+          exit 1
+        fi
+
+        # Upload process differs for Demo and Full versions
+        if [ "$IS_DEMO" == true ]; then
+          echo "Uploading Demo Version to WordPress Media Library"
+          
+          # Search for existing file
+          ENCODED_TITLE=$(urlencode "$FILE_TITLE")
+          echo "Searching for existing file with title: $FILE_TITLE"
+          EXISTING_FILE_RESPONSE=$(curl -s -X GET "${WORDPRESS_SITE}/wp-json/wp/v2/media?search=${ENCODED_TITLE}" \
+            -u "$WORDPRESS_USERNAME:$WORDPRESS_APPLICATION_PASSWORD")
+          EXISTING_FILE_ID=$(echo "$EXISTING_FILE_RESPONSE" | jq -r '.[] | select(.title.rendered == "'"$FILE_TITLE"'") | .id')
+
+          # Delete existing file if found
+          if [ -n "$EXISTING_FILE_ID" ]; then
+            echo "Existing file found with ID: $EXISTING_FILE_ID. Deleting..."
+            DELETE_RESPONSE=$(curl -s -X DELETE "${WORDPRESS_SITE}/wp-json/wp/v2/media/${EXISTING_FILE_ID}?force=true" \
+              -u "$WORDPRESS_USERNAME:$WORDPRESS_APPLICATION_PASSWORD")
+            
+            if echo "$DELETE_RESPONSE" | jq -e '.deleted == true' > /dev/null; then
+              echo "Existing file successfully deleted."
+            else
+              echo "Failed to delete existing file. Response: $DELETE_RESPONSE"
+              exit 1
+            fi
+          else
+            echo "No existing file found with the exact title."
+          fi
+
+          # Upload new file
+          echo "Uploading new file to WordPress..."
+          UPLOAD_RESPONSE=$(curl -s -X POST "${WORDPRESS_SITE}/wp-json/wp/v2/media" \
+            -u "$WORDPRESS_USERNAME:$WORDPRESS_APPLICATION_PASSWORD" \
+            -H "Content-Disposition: attachment; filename=$(basename "$FILE_PATH")" \
+            -F "file=@${FILE_PATH}" \
+            -F "title=${FILE_TITLE}" \
+            -F "alt_text=${REPO_NAME} Installer" \
+            -F "caption=Installer for ${REPO_NAME} v${wPROJECT_VERSION}${SUFFIX}" \
+            -F "description=${FILE_TITLE}")
+
+        else
+          echo "Uploading Full Version to WooCommerce Folder"
+          
+          # Attempt to delete existing file
+          echo "Attempting to delete existing file before upload..."
+          DELETE_RESPONSE=$(curl -s -X DELETE "${WORDPRESS_SITE}/wp-json/custom/v1/upload-file-to-woo" \
+            -u "$WORDPRESS_USERNAME:$WORDPRESS_APPLICATION_PASSWORD" \
+            -H "Content-Type: application/json" \
+            -d "{\"filename\":\"$FILE_NAME\"}")
+
+          if echo "$DELETE_RESPONSE" | grep -q "File deleted successfully"; then
+            echo "Existing file deleted successfully."
+          elif echo "$DELETE_RESPONSE" | grep -q "File not found"; then
+            echo "No existing file found. Proceeding with upload."
+          else
+            echo "Unexpected response during delete attempt: $DELETE_RESPONSE"
+          fi
+
+          # Upload new file
+          echo "Uploading full version file to WordPress using custom endpoint..."
+          UPLOAD_RESPONSE=$(curl -s -X POST "${WORDPRESS_SITE}/wp-json/custom/v1/upload-file-to-woo" \
+            -u "$WORDPRESS_USERNAME:$WORDPRESS_APPLICATION_PASSWORD" \
+            -F "file=@${FILE_PATH}")
+        fi
+
+        # Check upload response and extract URL
+        if [ "$IS_DEMO" == true ]; then
+          if echo "$UPLOAD_RESPONSE" | jq -e '.id' > /dev/null; then
+            echo "PASS: Demo version file successfully uploaded."
+            FILE_URL=$(echo "$UPLOAD_RESPONSE" | jq -r '.source_url')
+          else
+            echo "FAIL: Upload failed. Response: $UPLOAD_RESPONSE"
+            exit 1
+          fi
+        else
+          if echo "$UPLOAD_RESPONSE" | grep -q "File uploaded successfully"; then
+            echo "PASS: Full version file successfully uploaded."
+            FILE_URL=$(echo "$UPLOAD_RESPONSE" | jq -r '.url')
+          else
+            echo "FAIL: Upload failed. Response: $UPLOAD_RESPONSE"
+            exit 1
+          fi
+        fi
+
+        echo "Uploaded file URL: $FILE_URL"
+
+        # Extract and save URL root path
+        URL_ROOT_PATH=$(dirname "$FILE_URL")
+        echo "URL root path: $URL_ROOT_PATH"
+        echo "URL_ROOT_PATH=$URL_ROOT_PATH" >> $GITHUB_ENV
+
+
+    # Update WooCommerce Fields
+    # ==========================================================================================
+    - name: Update WooCommerce Downloadable Files
+      if: matrix.version == 'Full'
+      env:
+        WOOCOMMERCE_CONSUMER_KEY: ${{ secrets.WOO_CK }}
+        WOOCOMMERCE_CONSUMER_SECRET: ${{ secrets.WOO_CS }}
+        WORDPRESS_SITE_URL: ${{ secrets.WORDPRESS_SITE }}
+        WORDPRESS_PRODUCT_ID: ${{ secrets.WORDPRESS_PRODUCT_ID }}
+      shell: bash
+      run: |
+        set -e
+        
+        echo "Starting WooCommerce update step..."
+        
+        # Debug: Print all environment variables used
+        echo "WOOCOMMERCE_CONSUMER_KEY: ${WOOCOMMERCE_CONSUMER_KEY:0:4}**** (masked for security)"
+        echo "WOOCOMMERCE_CONSUMER_SECRET: ${WOOCOMMERCE_CONSUMER_SECRET:0:4}**** (masked for security)"
+        echo "WORDPRESS SITE URL: $WORDPRESS_SITE_URL"
+        echo "WORDPRESS_PRODUCT_ID: $WORDPRESS_PRODUCT_ID"
+        
+        # Check if all required environment variables are set
+        if [ -z "$WOOCOMMERCE_CONSUMER_KEY" ] || [ -z "$WOOCOMMERCE_CONSUMER_SECRET" ] || [ -z "$WORDPRESS_SITE_URL" ] || [ -z "$WORDPRESS_PRODUCT_ID" ]; then
+          echo "Error: Required WooCommerce credentials or Product ID not set. Skipping WooCommerce update step."
+          exit 0
+        fi
+    
+        # Fetch existing product details to get current download IDs
+        API_ENDPOINT="${WORDPRESS_SITE_URL}/wp-json/wc/v3/products/${WORDPRESS_PRODUCT_ID}"
+        AUTH="${WOOCOMMERCE_CONSUMER_KEY}:${WOOCOMMERCE_CONSUMER_SECRET}"
+        EXISTING_PRODUCT=$(curl -s -X GET "${API_ENDPOINT}" -u "$AUTH" -H "Content-Type: application/json")
+        
+        # Extract existing download details for both macOS and Windows files
+        DOWNLOAD_ID_WIN=$(echo "$EXISTING_PRODUCT" | jq -r '.downloads[] | select(.name | test("(?i)win")) | .id')
+        FILE_NAME_WIN=$(echo "$EXISTING_PRODUCT" | jq -r '.downloads[] | select(.name | test("(?i)win")) | .name')
+        FILE_URL_WIN=$(echo "$EXISTING_PRODUCT" | jq -r '.downloads[] | select(.name | test("(?i)win")) | .file')
+        
+        DOWNLOAD_ID_MAC=$(echo "$EXISTING_PRODUCT" | jq -r '.downloads[] | select(.name | test("(?i)mac")) | .id')
+        FILE_NAME_MAC=$(echo "$EXISTING_PRODUCT" | jq -r '.downloads[] | select(.name | test("(?i)mac")) | .name')
+        FILE_URL_MAC=$(echo "$EXISTING_PRODUCT" | jq -r '.downloads[] | select(.name | test("(?i)mac")) | .file')
+        
+        # Extract the repository name from the GitHub repository environment variable
+        REPO_NAME=$(echo $GITHUB_REPOSITORY | awk -F / '{print $2}')
+        echo "REPO_NAME set to: $REPO_NAME"
+
+        # Update the file URLs and names dynamically based on the root path
+        FILE_URL_WIN="${URL_ROOT_PATH}/${REPO_NAME}WinInstaller_${wPROJECT_VERSION}.exe"
+        FILE_NAME_WIN="${REPO_NAME} v${wPROJECT_VERSION} for Windows"
+
+        FILE_URL_MAC="${URL_ROOT_PATH}/${REPO_NAME}MacInstaller_${wPROJECT_VERSION}.pkg"
+        FILE_NAME_MAC="${REPO_NAME} v${wPROJECT_VERSION} for Mac"
+
+        # Output the dynamic URLs and names for debugging
+        echo "Windows file URL: $FILE_URL_WIN"
+        echo "Windows file name: $FILE_NAME_WIN"
+        echo "Mac file URL: $FILE_URL_MAC"
+        echo "Mac file name: $FILE_NAME_MAC"
+        
+        echo "Using file: $FILE_NAME_WIN with URL: $FILE_URL_WIN"
+        echo "Using file: $FILE_NAME_MAC with URL: $FILE_URL_MAC"
+        
+        # Prepare JSON payload to update both downloadable files
+        PAYLOAD=$(jq -n --arg name_win "$FILE_NAME_WIN" --arg url_win "$FILE_URL_WIN" --arg id_win "$DOWNLOAD_ID_WIN" \
+                              --arg name_mac "$FILE_NAME_MAC" --arg url_mac "$FILE_URL_MAC" --arg id_mac "$DOWNLOAD_ID_MAC" \
+                              '{
+                                "downloads": [
+                                    {
+                                        "id": $id_win,
+                                        "name": $name_win,
+                                        "file": $url_win
+                                    },
+                                    {
+                                        "id": $id_mac,
+                                        "name": $name_mac,
+                                        "file": $url_mac
+                                    }
+                                ]
+                              }')
+        
+        echo "JSON Payload: $PAYLOAD"
+        
+        # Make API request to update the product's downloadable files
+        RESPONSE=$(curl -s -X PUT "${API_ENDPOINT}" \
+          -u "$AUTH" \
+          -H "Content-Type: application/json" \
+          -d "$PAYLOAD")
+        
+        echo "API Response: $RESPONSE"
+        
+        # Check if the update was successful
+        if echo "$RESPONSE" | jq -e '.id' > /dev/null; then
+          echo "Product downloads updated successfully."
+        else
+          echo "Error: Failed to update product downloads. Response: $RESPONSE"
+          exit 1
+        fi
