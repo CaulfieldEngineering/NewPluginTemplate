@@ -26,10 +26,6 @@ jobs:
 
     runs-on: ${{ matrix.os }}
 
-    # CMAKE BUILD #################################################################################################################
-    # =============================================================================================================================
-    # =============================================================================================================================
-    # =============================================================================================================================
 
 
     # Checkout Code
@@ -38,6 +34,12 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
+
+
+
+
+    # CMAKE BUILD   #################################################################################################################
+    # region cmake-build
 
 
     # Cache Dependencies
@@ -100,24 +102,21 @@ jobs:
         echo "Needs MIDI Output: $wNEEDS_MIDI_OUTPUT"
         echo "Plugin Code: $wPLUGIN_CODE"
 
+    # CMAKE BUILD #################################################################################################################
+    # endregion
+
+
+
+
 
     # WIN INSTALLER ###############################################################################################################
-    # =============================================================================================================================
-    # =============================================================================================================================
-    # =============================================================================================================================
-
+    # region win-pkg
 
     # Install Inno Setup (Windows Only)
     # ==========================================================================================
     - name: Install Inno Setup (Windows Only)
       if: matrix.os == 'windows-latest'
       run: choco install innosetup --yes
-
-
-
-    # Sign Payload (Win)
-    # ==========================================================================================
-
 
     # Compile Inno Setup script (Windows Only)
     # ==========================================================================================
@@ -127,12 +126,46 @@ jobs:
         & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' "${{github.workspace}}\build\installer_win.iss"
       shell: pwsh
 
+    # Check for required signing secrets
+    # ==========================================================================================
+    - name: Check Required Secrets
+      id: check_secrets
+      shell: bash
+      run: |
+        if [ -z "${{ secrets.AZURE_TENANT_ID }}" ] || [ -z "${{ secrets.AZURE_CLIENT_ID }}" ] || [ -z "${{ secrets.AZURE_CLIENT_SECRET }}" ] || [ -z "${{ secrets.AZURE_ENDPOINT }}" ] || [ -z "${{ secrets.AZURE_CODE_SIGNING_NAME }}" ] || [ -z "${{ secrets.AZURE_CERT_PROFILE_NAME }}" ]; then
+          echo "Required secrets for Azure signing are not set. Skipping signing step."
+          echo "proceed=false" >> $GITHUB_OUTPUT
+        else
+          echo "proceed=true" >> $GITHUB_OUTPUT
+        fi
+
+    # Sign the Windows Installer Executable using Azure Trusted Signing
+    # ==========================================================================================
+    - name: Sign Windows Installer (Azure)
+      if: ${{ matrix.os == 'windows-latest' && steps.check_secrets.outputs.proceed == 'true' }}
+      uses: azure/trusted-signing-action@v0.5.0
+      with:
+        azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+        azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+        azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+        endpoint: ${{ secrets.AZURE_ENDPOINT }}
+        trusted-signing-account-name: ${{ secrets.AZURE_CODE_SIGNING_NAME }}
+        certificate-profile-name: ${{ secrets.AZURE_CERT_PROFILE_NAME }}
+        files-folder: ${{ github.workspace }}/build
+        files-folder-filter: exe
+        file-digest: SHA256
+        timestamp-rfc3161: http://timestamp.acs.microsoft.com
+        timestamp-digest: SHA256
+
+    # WIN INSTALLER ###############################################################################################################
+    # endregion
+
+
+
 
 
     # MAC INSTALLER ###############################################################################################################
-    # =============================================================================================================================
-    # =============================================================================================================================
-    # =============================================================================================================================
+    # region macos-pkg
 
     # Sign Payload (Mac) - 2024.10.25.
     # ==========================================================================================
@@ -634,12 +667,15 @@ jobs:
     
         echo "Stapling process completed successfully."
 
+    # MAC INSTALLER ###############################################################################################################
+    # endregion
+
+
+
+
 
     # BACKUP TO SERVER ############################################################################################################
-    # =============================================================================================================================
-    # =============================================================================================================================
-    # =============================================================================================================================
-
+    # region ssh-backup
 
     # Print build folder contents
     # ==========================================================================================
@@ -782,11 +818,15 @@ jobs:
         # Disable debugging output
         set +x  
 
+    # BACKUP TO SERVER ############################################################################################################
+    # endregion
+
+
+
+
 
     # UPDATE WORDPRESS ############################################################################################################
-    # =============================================================================================================================
-    # =============================================================================================================================
-    # =============================================================================================================================
+    # region wordpress
 
 
     # Upload Installers to WordPress Media Library
@@ -1049,3 +1089,118 @@ jobs:
           echo "Error: Failed to update product downloads. Response: $RESPONSE"
           exit 1
         fi
+
+        
+    # Update the Demo Download Redirect URLs
+    # ==========================================================================================
+    - name: Update Demo Redirect URLs
+      if: matrix.version == 'Demo'
+      env:
+        WORDPRESS_USERNAME: ${{ secrets.WORDPRESS_USERNAME }}
+        WORDPRESS_APPLICATION_PASSWORD: ${{ secrets.WORDPRESS_APPLICATION_PASSWORD }}
+        WORDPRESS_SITE_URL: ${{ secrets.WORDPRESS_SITE }}
+      shell: bash
+      run: |
+        set -e  # Exit immediately if any command exits with a non-zero status
+        echo "Starting update of demo redirect URLs in WordPress..."
+        
+        # Validate required variables
+        if [ -z "$WORDPRESS_USERNAME" ] || [ -z "$WORDPRESS_APPLICATION_PASSWORD" ] || [ -z "$WORDPRESS_SITE_URL" ]; then
+          echo "Error: Missing WordPress credentials or site URL."
+          exit 1
+        fi
+        
+        # Fetch and debug group response
+        echo "Fetching default group ID..."
+        GROUP_RESPONSE=$(curl -s -X GET "${WORDPRESS_SITE_URL}/wp-json/redirection/v1/group" \
+          -u "$WORDPRESS_USERNAME:$WORDPRESS_APPLICATION_PASSWORD")
+        echo "Raw group response: $GROUP_RESPONSE"
+        
+        # Extract default group ID based on response structure
+        DEFAULT_GROUP=$(echo "$GROUP_RESPONSE" | jq -r '.items[0].id')
+        if [ -z "$DEFAULT_GROUP" ]; then
+          echo "Error: Failed to retrieve default group ID."
+          exit 1
+        fi
+        echo "Default group ID: $DEFAULT_GROUP"
+        
+        # Get repository name in both cases
+        REPO_NAME=$(echo $GITHUB_REPOSITORY | awk -F / '{print $2}')
+        REPO_NAME_LOWER=$(echo $REPO_NAME | tr '[:upper:]' '[:lower:]')
+        
+        # Construct destination URLs (keeping original case for file names)
+        DEMO_FILE_URL_MAC="${URL_ROOT_PATH}/${REPO_NAME}MacInstaller_${wPROJECT_VERSION}.D.pkg"
+        DEMO_FILE_URL_WIN="${URL_ROOT_PATH}/${REPO_NAME}WinInstaller_${wPROJECT_VERSION}.D.exe"
+        
+        # Construct Source URLs (in lowercase)
+        SOURCE_URL_MAC="/${REPO_NAME_LOWER}-demo-mac"
+        SOURCE_URL_WIN="/${REPO_NAME_LOWER}-demo-windows"
+        
+        # Function to update or create redirect
+        update_redirect() {
+          local source_url=$1
+          local target_url=$2
+          
+          echo "Processing redirect for ${source_url}"
+          
+          # First, try to find existing redirect
+          echo "Checking for existing redirect..."
+          EXISTING_REDIRECT=$(curl -s -X GET "${WORDPRESS_SITE_URL}/wp-json/redirection/v1/redirect?search=${source_url}" \
+            -u "$WORDPRESS_USERNAME:$WORDPRESS_APPLICATION_PASSWORD")
+          
+          # Extract redirect ID if it exists
+          REDIRECT_ID=$(echo "$EXISTING_REDIRECT" | jq -r '.items[] | select(.url=="'"${source_url}"'") | .id')
+          
+          if [ ! -z "$REDIRECT_ID" ]; then
+            echo "Found existing redirect (ID: ${REDIRECT_ID}). Updating..."
+            RESPONSE=$(curl -s -X POST "${WORDPRESS_SITE_URL}/wp-json/redirection/v1/redirect/${REDIRECT_ID}" \
+              -u "$WORDPRESS_USERNAME:$WORDPRESS_APPLICATION_PASSWORD" \
+              -H "Content-Type: application/json" \
+              -d '{
+                "url": "'"${source_url}"'",
+                "action_data": {
+                  "url": "'"${target_url}"'",
+                  "code": 301
+                },
+                "match_type": "url",
+                "action_type": "url",
+                "regex": false,
+                "status": "enabled",
+                "group_id": '"${DEFAULT_GROUP}"'
+              }')
+          else
+            echo "No existing redirect found. Creating new one..."
+            RESPONSE=$(curl -s -X POST "${WORDPRESS_SITE_URL}/wp-json/redirection/v1/redirect" \
+              -u "$WORDPRESS_USERNAME:$WORDPRESS_APPLICATION_PASSWORD" \
+              -H "Content-Type: application/json" \
+              -d '{
+                "url": "'"${source_url}"'",
+                "action_data": {
+                  "url": "'"${target_url}"'",
+                  "code": 301
+                },
+                "match_type": "url",
+                "action_type": "url",
+                "regex": false,
+                "status": "enabled",
+                "group_id": '"${DEFAULT_GROUP}"'
+              }')
+          fi
+          
+          # Check for errors in response
+          if echo "$RESPONSE" | jq -e 'has("code")' > /dev/null; then
+            echo "Error in API response: $RESPONSE"
+            return 1
+          fi
+          
+          echo "Successfully processed redirect for ${source_url}"
+        }
+        
+        # Update redirections
+        update_redirect "$SOURCE_URL_MAC" "$DEMO_FILE_URL_MAC"
+        update_redirect "$SOURCE_URL_WIN" "$DEMO_FILE_URL_WIN"
+        
+        echo "Redirect URLs updated successfully."
+
+    # UPDATE WORDPRESS ############################################################################################################
+    # endregion
