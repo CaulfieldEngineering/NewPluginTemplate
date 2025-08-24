@@ -135,11 +135,12 @@ namespace audio_plugin {
     }
 
     bool AudioPluginAudioProcessor::hasEditor() const {
-    return true; // (change this to false if you choose to not supply an editor)
+    	return true; // (change this to false if you choose to not supply an editor)
     }
 
     juce::AudioProcessorEditor *AudioPluginAudioProcessor::createEditor() {
-    return new AudioPluginAudioProcessorEditor(*this);
+    	// return new AudioPluginAudioProcessorEditor(*this);
+    	return new juce::GenericAudioProcessorEditor(*this);
     }
 
     void AudioPluginAudioProcessor::getStateInformation(
