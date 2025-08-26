@@ -99,8 +99,7 @@ include(cmake/cpm.cmake)
 # =====================================================================
 CPMAddPackage(
     NAME JUCE
-    GIT_TAG 7.0.9
-    VERSION 7.0.9
+    GIT_TAG latest
     GITHUB_REPOSITORY juce-framework/JUCE
     SOURCE_DIR ${LIB_DIR}/juce
 )
