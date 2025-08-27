@@ -11,7 +11,8 @@ namespace audio_plugin {
     #endif
                 .withOutput("Output", juce::AudioChannelSet::stereo(), true)
     #endif
-        ) {
+        ),
+        mParameterTree(*this, nullptr, "Parameters", createParameterLayout()) {
     }
 
     AudioPluginAudioProcessor::~AudioPluginAudioProcessor() {}
@@ -148,7 +149,11 @@ namespace audio_plugin {
     // You should use this method to store your parameters in the memory block.
     // You could do that either as raw data, or use the XML or ValueTree classes
     // as intermediaries to make it easy to save and load complex data.
-    juce::ignoreUnused(destData);
+    
+    // Save the current parameter state
+    auto state = mParameterTree.copyState();
+    std::unique_ptr<juce::XmlElement> xml(state.createXml());
+    copyXmlToBinary(*xml, destData);
     }
 
     void AudioPluginAudioProcessor::setStateInformation(const void *data,
@@ -156,8 +161,38 @@ namespace audio_plugin {
     // You should use this method to restore your parameters from this memory
     // block, whose contents will have been created by the getStateInformation()
     // call.
-    juce::ignoreUnused(data, sizeInBytes);
+    
+    // Restore the parameter state
+    std::unique_ptr<juce::XmlElement> xmlState(getXmlFromBinary(data, sizeInBytes));
+    
+    if (xmlState.get() != nullptr) {
+        if (xmlState->hasTagName(mParameterTree.state.getType())) {
+            mParameterTree.replaceState(juce::ValueTree::fromXml(*xmlState));
+        }
     }
+    }
+    
+    // ============================================================================
+    // PARAMETER LAYOUT CREATION
+    // ============================================================================
+    juce::AudioProcessorValueTreeState::ParameterLayout AudioPluginAudioProcessor::createParameterLayout() {
+        std::vector<std::unique_ptr<juce::RangedAudioParameter>> params;
+        
+        // TODO: Add your parameters here
+        // Example:
+        // params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        //     "gain",           // parameterID
+        //     "Gain",           // parameter name
+        //     0.0f,             // minimum value
+        //     1.0f,             // maximum value
+        //     0.5f,             // default value
+        //     juce::AudioParameterFloatAttributes()
+        //         .withLabel("dB")
+        // ));
+        
+        return { params.begin(), params.end() };
+    }
+
 } // namespace audio_plugin
 
 // This creates new instances of the plugin.

@@ -36,6 +36,17 @@ namespace audio_plugin {
     void setStateInformation(const void *data, int sizeInBytes) override;
 
     private:
+    // ============================================================================
+    // PARAMETER TREE
+    // ============================================================================
+    juce::AudioProcessorValueTreeState mParameterTree;
+    juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
+    
+    // ============================================================================
+    // PARAMETER ACCESS
+    // ============================================================================
+    juce::AudioProcessorValueTreeState& getParameterTree() { return mParameterTree; }
+    
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AudioPluginAudioProcessor)
     };
 } // namespace audio_plugin
