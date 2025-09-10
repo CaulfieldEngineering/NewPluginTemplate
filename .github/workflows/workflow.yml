@@ -208,7 +208,12 @@ jobs:
       id: check_secrets
       shell: bash
       run: |
-        if [ -z "${{ secrets.AZURE_TENANT_ID }}" ] || [ -z "${{ secrets.AZURE_CLIENT_ID }}" ] || [ -z "${{ secrets.AZURE_CLIENT_SECRET }}" ] || [ -z "${{ secrets.AZURE_ENDPOINT }}" ] || [ -z "${{ secrets.AZURE_CODE_SIGNING_NAME }}" ] || [ -z "${{ secrets.AZURE_CERT_PROFILE_NAME }}" ]; then
+        if [ -z "${{ secrets.AZURE_TENANT_ID }}" ] || [ "${{ secrets.AZURE_TENANT_ID }}" = "!" ] || \
+           [ -z "${{ secrets.AZURE_CLIENT_ID }}" ] || [ "${{ secrets.AZURE_CLIENT_ID }}" = "!" ] || \
+           [ -z "${{ secrets.AZURE_CLIENT_SECRET }}" ] || [ "${{ secrets.AZURE_CLIENT_SECRET }}" = "!" ] || \
+           [ -z "${{ secrets.AZURE_ENDPOINT }}" ] || [ "${{ secrets.AZURE_ENDPOINT }}" = "!" ] || \
+           [ -z "${{ secrets.AZURE_CODE_SIGNING_NAME }}" ] || [ "${{ secrets.AZURE_CODE_SIGNING_NAME }}" = "!" ] || \
+           [ -z "${{ secrets.AZURE_CERT_PROFILE_NAME }}" ] || [ "${{ secrets.AZURE_CERT_PROFILE_NAME }}" = "!" ]; then
           echo "Required secrets for Azure signing are not set. Skipping signing step."
           echo "proceed=false" >> $GITHUB_OUTPUT
         else
@@ -246,7 +251,9 @@ jobs:
         REPOSITORY_NAME: ${{ github.event.repository.name }}
       run: |
         # Check for required secrets
-        if [ -z "$APPLICATION_CERTIFICATE_BASE64" ] || [ -z "$CERTIFICATE_PASSWORD" ] || [ -z "$KEYCHAIN_PASSWORD" ]; then
+        if [ -z "$APPLICATION_CERTIFICATE_BASE64" ] || [ "$APPLICATION_CERTIFICATE_BASE64" = "!" ] || \
+           [ -z "$CERTIFICATE_PASSWORD" ] || [ "$CERTIFICATE_PASSWORD" = "!" ] || \
+           [ -z "$KEYCHAIN_PASSWORD" ] || [ "$KEYCHAIN_PASSWORD" = "!" ]; then
           echo "Required secrets for application signing are not set. Skipping application signing step."
           exit 0
         fi
@@ -431,7 +438,9 @@ jobs:
         REPOSITORY_NAME: ${{ github.event.repository.name }}
       run: |
         # Check for required secrets
-        if [ -z "$INSTALLER_CERTIFICATE_BASE64" ] || [ -z "$CERTIFICATE_PASSWORD" ] || [ -z "$KEYCHAIN_PASSWORD" ]; then
+        if [ -z "$INSTALLER_CERTIFICATE_BASE64" ] || [ "$INSTALLER_CERTIFICATE_BASE64" = "!" ] || \
+           [ -z "$CERTIFICATE_PASSWORD" ] || [ "$CERTIFICATE_PASSWORD" = "!" ] || \
+           [ -z "$KEYCHAIN_PASSWORD" ] || [ "$KEYCHAIN_PASSWORD" = "!" ]; then
           echo "Required secrets for installer signing are not set. Skipping installer signing step."
           exit 0
         fi
@@ -565,7 +574,9 @@ jobs:
         REPOSITORY_NAME: ${{ github.event.repository.name }}
       run: |
         # Check for required secrets
-        if [ -z "$INSTALLER_CERTIFICATE_BASE64" ] || [ -z "$CERTIFICATE_PASSWORD" ] || [ -z "$KEYCHAIN_PASSWORD" ]; then
+        if [ -z "$INSTALLER_CERTIFICATE_BASE64" ] || [ "$INSTALLER_CERTIFICATE_BASE64" = "!" ] || \
+           [ -z "$CERTIFICATE_PASSWORD" ] || [ "$CERTIFICATE_PASSWORD" = "!" ] || \
+           [ -z "$KEYCHAIN_PASSWORD" ] || [ "$KEYCHAIN_PASSWORD" = "!" ]; then
           echo "Required secrets for installer signing are not set. Skipping installer signing step."
           exit 0
         fi
@@ -631,7 +642,9 @@ jobs:
         REPOSITORY_NAME: ${{ github.event.repository.name }}
       run: |
         # Check for required secrets
-        if [ -z "$APPLE_ID" ] || [ -z "$APPLE_TEAM_ID" ] || [ -z "$APPLE_APP_SPECIFIC_PASSWORD" ]; then
+        if [ -z "$APPLE_ID" ] || [ "$APPLE_ID" = "!" ] || \
+           [ -z "$APPLE_TEAM_ID" ] || [ "$APPLE_TEAM_ID" = "!" ] || \
+           [ -z "$APPLE_APP_SPECIFIC_PASSWORD" ] || [ "$APPLE_APP_SPECIFIC_PASSWORD" = "!" ]; then
           echo "Required secrets for notarization are not set. Skipping notarization step."
           exit 0
         fi
@@ -711,7 +724,7 @@ jobs:
         APPLE_ID: ${{ secrets.APPLE_ID }}  # Used to check if notarization was run
       run: |
         # Check if notarization was meant to run
-        if [ -z "$APPLE_ID" ]; then
+        if [ -z "$APPLE_ID" ] || [ "$APPLE_ID" = "!" ]; then
           echo "Notarization credentials not set. Skipping stapling step."
           exit 0
         fi
@@ -748,6 +761,154 @@ jobs:
           build/*Installer_*.exe
 
 
+    # Check SSH Credentials Available - All Cases
+    # ==========================================================================================
+    - name: Check SSH Credentials
+      id: check_ssh
+      shell: bash
+      run: |
+        if [ -n "${{ secrets.SSH_ID }}" ]; then
+          echo "ssh_available=true" >> $GITHUB_OUTPUT
+        else
+          echo "ssh_available=false" >> $GITHUB_OUTPUT
+          echo "SSH credentials not set. Skipping SSH-related steps."
+        fi
+
+
+    # Setup SSH for Server Upload - All Cases
+    # ==========================================================================================
+    - name: Setup SSH
+      if: steps.check_ssh.outputs.ssh_available == 'true'
+      uses: webfactory/ssh-agent@v0.5.3
+      with:
+        ssh-private-key: ${{ secrets.SSH_ID }}
+
+
+    # Add Host Key (Windows) - All Cases
+    # ==========================================================================================
+    - name: Add Host Key (Windows)
+      if: steps.check_ssh.outputs.ssh_available == 'true' && matrix.os == 'windows-latest'
+      shell: pwsh
+      run: |
+        if (-Not (Test-Path -Path $HOME/.ssh)) {
+          New-Item -ItemType Directory -Path $HOME/.ssh
+        }
+        ssh-keyscan -p 7822 CaulfieldEngineering.com | Out-File -Append -Encoding ascii $HOME/.ssh/known_hosts
+
+
+    # Add Host Key (macOS) - All Cases
+    # ==========================================================================================
+    - name: Add Host Key (macOS)
+      if: steps.check_ssh.outputs.ssh_available == 'true' && matrix.os == 'macos-latest'
+      run: |
+        mkdir -p ~/.ssh
+        ssh-keyscan -p 7822 CaulfieldEngineering.com >> ~/.ssh/known_hosts
+
+
+    # Create SSH Config - All Cases
+    # ==========================================================================================
+    - name: Create SSH Config
+      if: steps.check_ssh.outputs.ssh_available == 'true'
+      shell: bash
+      run: |
+        mkdir -p ~/.ssh
+        echo "Host CaulfieldEngineering.com
+          HostName CaulfieldEngineering.com
+          User caulfiel
+          Port 7822
+          MACs hmac-sha2-256
+          StrictHostKeyChecking no" > ~/.ssh/config
+
+
+    # Verify SSH Connection - All Cases
+    # ==========================================================================================
+    - name: Verify SSH Key and Connection
+      if: steps.check_ssh.outputs.ssh_available == 'true'
+      shell: bash
+      run: |
+        echo "Checking loaded SSH keys:"
+        ssh-add -l
+        
+        echo "Attempting SSH connection:"
+        ssh -vvv CaulfieldEngineering.com exit
+
+
+    # Upload Installers to Server (SCP) - All Cases
+    # ==========================================================================================
+    - name: Upload Installers to Server (SCP)
+      if: steps.check_ssh.outputs.ssh_available == 'true'
+      env:
+        REPOSITORY_NAME: ${{ github.event.repository.name }}
+      shell: bash
+      run: |
+        set -e  # Exit immediately if any command exits with a non-zero status
+
+        echo "SSH credentials available. Starting server upload..."
+
+        echo "Starting upload process to server..."
+        DEST_DIR="${{ matrix.os == 'windows-latest' && 'win' || 'mac' }}"
+        echo "DEST_DIR set to: $DEST_DIR"
+
+        REPO_NAME=$(echo $GITHUB_REPOSITORY | awk -F / '{print $2}')
+        echo "REPO_NAME set to: $REPO_NAME"
+
+        # Determine the suffix based on the version
+        SUFFIX=""
+        if [[ "${{ matrix.version }}" == "Demo" ]]; then
+          SUFFIX=".D"
+        fi
+
+        # Set source file based on OS
+        if [ "${{ matrix.os }}" == "macos-latest" ]; then
+          SOURCE_FILE="${GITHUB_WORKSPACE}/build/${REPO_NAME}MacInstaller_${wPROJECT_VERSION}${SUFFIX}.pkg"
+          echo "macOS build: SOURCE_FILE set to $SOURCE_FILE"
+        elif [ "${{ matrix.os }}" == "windows-latest" ]; then
+          SOURCE_FILE="${GITHUB_WORKSPACE}/build/${REPO_NAME}WinInstaller_${wPROJECT_VERSION}${SUFFIX}.exe"
+          echo "Windows build: SOURCE_FILE set to $SOURCE_FILE"
+        else
+          echo "Unsupported OS: ${{ matrix.os }}"
+          exit 1
+        fi
+
+        # Set destination path
+        DEST_PATH="/home/caulfiel/public_html/plug-ins/${REPO_NAME}/uploads/${DEST_DIR}/"
+        SERVER="CaulfieldEngineering.com"
+
+        echo "Checking if destination directory exists on the server..."
+        if ssh $SERVER "test -d $DEST_PATH"; then
+          echo "Directory exists: $DEST_PATH"
+        else
+          echo "Directory does not exist, creating directory: $DEST_PATH"
+          if ssh $SERVER "mkdir -p $DEST_PATH"; then
+            echo "Directory created successfully"
+          else
+            echo "Failed to create directory: $DEST_PATH"
+            exit 1
+          fi
+        fi
+
+        echo "Verifying source file exists..."
+        if [ -f "$SOURCE_FILE" ]; then
+          echo "✓ Source file exists: $SOURCE_FILE"
+        else
+          echo "ERROR: Source file does not exist: $SOURCE_FILE"
+          echo "Contents of build directory:"
+          ls -la ${GITHUB_WORKSPACE}/build/
+          exit 1
+        fi
+
+        echo "Beginning SCP Transfer..."
+        echo "Source file: $SOURCE_FILE"
+        echo "Destination: $SERVER:$DEST_PATH"
+
+        if scp -v "$SOURCE_FILE" "$SERVER:$DEST_PATH"; then
+          echo "✓ SCP transfer completed successfully"
+        else
+          echo "ERROR: SCP transfer failed with exit code $?"
+          exit 1
+        fi
+
+
     # Upload Installers to WordPress Media Library - Tag Only
     # ==========================================================================================
     - name: Upload Installers to WordPress
@@ -778,7 +939,9 @@ jobs:
         }
 
         # Check if WordPress credentials are set
-        if [ -z "$WORDPRESS_USERNAME" ] || [ -z "$WORDPRESS_APPLICATION_PASSWORD" ] || [ -z "$WORDPRESS_SITE" ]; then
+        if [ -z "$WORDPRESS_USERNAME" ] || [ "$WORDPRESS_USERNAME" = "!" ] || \
+           [ -z "$WORDPRESS_APPLICATION_PASSWORD" ] || [ "$WORDPRESS_APPLICATION_PASSWORD" = "!" ] || \
+           [ -z "$WORDPRESS_SITE" ] || [ "$WORDPRESS_SITE" = "!" ]; then
           echo "WordPress credentials not set. Skipping WordPress upload step."
           exit 0
         fi
@@ -872,7 +1035,9 @@ jobs:
         echo "Starting update of download redirect URLs in WordPress..."
         
         # Validate required variables
-        if [ -z "$WORDPRESS_USERNAME" ] || [ -z "$WORDPRESS_APPLICATION_PASSWORD" ] || [ -z "$WORDPRESS_SITE_URL" ]; then
+        if [ -z "$WORDPRESS_USERNAME" ] || [ "$WORDPRESS_USERNAME" = "!" ] || \
+           [ -z "$WORDPRESS_APPLICATION_PASSWORD" ] || [ "$WORDPRESS_APPLICATION_PASSWORD" = "!" ] || \
+           [ -z "$WORDPRESS_SITE_URL" ] || [ "$WORDPRESS_SITE_URL" = "!" ]; then
           echo "Error: Missing WordPress credentials or site URL."
           exit 0
         fi

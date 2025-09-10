@@ -80,6 +80,7 @@ endif()
 include(${CMAKE_CURRENT_SOURCE_DIR}/sourceListResult.cmake)
 
 
+
 # Console out the value of PLUGIN_SOURCES
 # =====================================================================
 message(STATUS "Source files for ${PROJECT_NAME}: ${PLUGIN_SOURCES}")
@@ -107,6 +108,7 @@ target_link_libraries(${PROJECT_NAME}
 	    ${PROJECT_NAME}BinaryData
         juce::juce_audio_utils
 	    juce::juce_dsp
+        WizardCore::AudioModules
     PUBLIC
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags
@@ -142,3 +144,46 @@ target_compile_definitions(${PROJECT_NAME}
 # =====================================================================
 file(GLOB_RECURSE ALL_JUCE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/../libs/juce/modules/juce_*")
 source_group("JUCE Modules" FILES ${ALL_JUCE_FILES})
+
+# Define and create source groups for WizardCore files
+# =====================================================================
+# This programmatically organizes all WizardCore module files into a clean folder structure
+# in Visual Studio, regardless of how many modules exist or are added in the future
+
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../libs/wizardcore/plugin/source")
+    # Get all WizardCore source files (.cpp, .h)
+    file(GLOB_RECURSE WIZARDCORE_CPP_FILES 
+        "${CMAKE_CURRENT_SOURCE_DIR}/../libs/wizardcore/plugin/source/*.cpp"
+    )
+    file(GLOB_RECURSE WIZARDCORE_H_FILES 
+        "${CMAKE_CURRENT_SOURCE_DIR}/../libs/wizardcore/plugin/source/*.h"
+    )
+    
+    # Combine all WizardCore files
+    set(ALL_WIZARDCORE_FILES ${WIZARDCORE_CPP_FILES} ${WIZARDCORE_H_FILES})
+    
+    # Create organized source groups for each WizardCore module
+    foreach(WIZARDCORE_FILE ${ALL_WIZARDCORE_FILES})
+        # Get the relative path from the WizardCore source directory
+        file(RELATIVE_PATH REL_PATH 
+            "${CMAKE_CURRENT_SOURCE_DIR}/../libs/wizardcore/plugin/source" 
+            "${WIZARDCORE_FILE}"
+        )
+        
+        # Extract the directory part (e.g., "Chorus", "LFO", "DelayLine/BBDelayLine")
+        get_filename_component(FILE_DIR "${REL_PATH}" DIRECTORY)
+        
+        # Create the source group path
+        if(FILE_DIR STREQUAL "")
+            # Files in root source directory
+            source_group("WizardCore" FILES "${WIZARDCORE_FILE}")
+        else()
+            # Files in subdirectories - create nested groups
+            string(REPLACE "/" "\\" GROUP_PATH "${FILE_DIR}")
+            source_group("WizardCore\\${GROUP_PATH}" FILES "${WIZARDCORE_FILE}")
+        endif()
+    endforeach()
+    
+    list(LENGTH ALL_WIZARDCORE_FILES WIZARDCORE_FILE_COUNT)
+    message(STATUS "Organized ${WIZARDCORE_FILE_COUNT} WizardCore files into Visual Studio source groups")
+endif()
