@@ -208,12 +208,12 @@ jobs:
       id: check_secrets
       shell: bash
       run: |
-        if [ -z "${{ secrets.AZURE_TENANT_ID }}" ] || [ "${{ secrets.AZURE_TENANT_ID }}" = "!" ] || \
-           [ -z "${{ secrets.AZURE_CLIENT_ID }}" ] || [ "${{ secrets.AZURE_CLIENT_ID }}" = "!" ] || \
-           [ -z "${{ secrets.AZURE_CLIENT_SECRET }}" ] || [ "${{ secrets.AZURE_CLIENT_SECRET }}" = "!" ] || \
-           [ -z "${{ secrets.AZURE_ENDPOINT }}" ] || [ "${{ secrets.AZURE_ENDPOINT }}" = "!" ] || \
-           [ -z "${{ secrets.AZURE_CODE_SIGNING_NAME }}" ] || [ "${{ secrets.AZURE_CODE_SIGNING_NAME }}" = "!" ] || \
-           [ -z "${{ secrets.AZURE_CERT_PROFILE_NAME }}" ] || [ "${{ secrets.AZURE_CERT_PROFILE_NAME }}" = "!" ]; then
+        if [ -z "${{ secrets.AZURE_TENANT_ID }}" ] || [ "${{ secrets.AZURE_TENANT_ID }}" = "SKIP" ] || \
+           [ -z "${{ secrets.AZURE_CLIENT_ID }}" ] || [ "${{ secrets.AZURE_CLIENT_ID }}" = "SKIP" ] || \
+           [ -z "${{ secrets.AZURE_CLIENT_SECRET }}" ] || [ "${{ secrets.AZURE_CLIENT_SECRET }}" = "SKIP" ] || \
+           [ -z "${{ secrets.AZURE_ENDPOINT }}" ] || [ "${{ secrets.AZURE_ENDPOINT }}" = "SKIP" ] || \
+           [ -z "${{ secrets.AZURE_CODE_SIGNING_NAME }}" ] || [ "${{ secrets.AZURE_CODE_SIGNING_NAME }}" = "SKIP" ] || \
+           [ -z "${{ secrets.AZURE_CERT_PROFILE_NAME }}" ] || [ "${{ secrets.AZURE_CERT_PROFILE_NAME }}" = "SKIP" ]; then
           echo "Required secrets for Azure signing are not set. Skipping signing step."
           echo "proceed=false" >> $GITHUB_OUTPUT
         else
@@ -251,9 +251,9 @@ jobs:
         REPOSITORY_NAME: ${{ github.event.repository.name }}
       run: |
         # Check for required secrets
-        if [ -z "$APPLICATION_CERTIFICATE_BASE64" ] || [ "$APPLICATION_CERTIFICATE_BASE64" = "!" ] || \
-           [ -z "$CERTIFICATE_PASSWORD" ] || [ "$CERTIFICATE_PASSWORD" = "!" ] || \
-           [ -z "$KEYCHAIN_PASSWORD" ] || [ "$KEYCHAIN_PASSWORD" = "!" ]; then
+        if [ -z "$APPLICATION_CERTIFICATE_BASE64" ] || [ "$APPLICATION_CERTIFICATE_BASE64" = "SKIP" ] || \
+           [ -z "$CERTIFICATE_PASSWORD" ] || [ "$CERTIFICATE_PASSWORD" = "SKIP" ] || \
+           [ -z "$KEYCHAIN_PASSWORD" ] || [ "$KEYCHAIN_PASSWORD" = "SKIP" ]; then
           echo "Required secrets for application signing are not set. Skipping application signing step."
           exit 0
         fi
@@ -438,9 +438,9 @@ jobs:
         REPOSITORY_NAME: ${{ github.event.repository.name }}
       run: |
         # Check for required secrets
-        if [ -z "$INSTALLER_CERTIFICATE_BASE64" ] || [ "$INSTALLER_CERTIFICATE_BASE64" = "!" ] || \
-           [ -z "$CERTIFICATE_PASSWORD" ] || [ "$CERTIFICATE_PASSWORD" = "!" ] || \
-           [ -z "$KEYCHAIN_PASSWORD" ] || [ "$KEYCHAIN_PASSWORD" = "!" ]; then
+        if [ -z "$INSTALLER_CERTIFICATE_BASE64" ] || [ "$INSTALLER_CERTIFICATE_BASE64" = "SKIP" ] || \
+           [ -z "$CERTIFICATE_PASSWORD" ] || [ "$CERTIFICATE_PASSWORD" = "SKIP" ] || \
+           [ -z "$KEYCHAIN_PASSWORD" ] || [ "$KEYCHAIN_PASSWORD" = "SKIP" ]; then
           echo "Required secrets for installer signing are not set. Skipping installer signing step."
           exit 0
         fi
@@ -574,9 +574,9 @@ jobs:
         REPOSITORY_NAME: ${{ github.event.repository.name }}
       run: |
         # Check for required secrets
-        if [ -z "$INSTALLER_CERTIFICATE_BASE64" ] || [ "$INSTALLER_CERTIFICATE_BASE64" = "!" ] || \
-           [ -z "$CERTIFICATE_PASSWORD" ] || [ "$CERTIFICATE_PASSWORD" = "!" ] || \
-           [ -z "$KEYCHAIN_PASSWORD" ] || [ "$KEYCHAIN_PASSWORD" = "!" ]; then
+        if [ -z "$INSTALLER_CERTIFICATE_BASE64" ] || [ "$INSTALLER_CERTIFICATE_BASE64" = "SKIP" ] || \
+           [ -z "$CERTIFICATE_PASSWORD" ] || [ "$CERTIFICATE_PASSWORD" = "SKIP" ] || \
+           [ -z "$KEYCHAIN_PASSWORD" ] || [ "$KEYCHAIN_PASSWORD" = "SKIP" ]; then
           echo "Required secrets for installer signing are not set. Skipping installer signing step."
           exit 0
         fi
@@ -642,9 +642,9 @@ jobs:
         REPOSITORY_NAME: ${{ github.event.repository.name }}
       run: |
         # Check for required secrets
-        if [ -z "$APPLE_ID" ] || [ "$APPLE_ID" = "!" ] || \
-           [ -z "$APPLE_TEAM_ID" ] || [ "$APPLE_TEAM_ID" = "!" ] || \
-           [ -z "$APPLE_APP_SPECIFIC_PASSWORD" ] || [ "$APPLE_APP_SPECIFIC_PASSWORD" = "!" ]; then
+        if [ -z "$APPLE_ID" ] || [ "$APPLE_ID" = "SKIP" ] || \
+           [ -z "$APPLE_TEAM_ID" ] || [ "$APPLE_TEAM_ID" = "SKIP" ] || \
+           [ -z "$APPLE_APP_SPECIFIC_PASSWORD" ] || [ "$APPLE_APP_SPECIFIC_PASSWORD" = "SKIP" ]; then
           echo "Required secrets for notarization are not set. Skipping notarization step."
           exit 0
         fi
@@ -724,7 +724,7 @@ jobs:
         APPLE_ID: ${{ secrets.APPLE_ID }}  # Used to check if notarization was run
       run: |
         # Check if notarization was meant to run
-        if [ -z "$APPLE_ID" ] || [ "$APPLE_ID" = "!" ]; then
+        if [ -z "$APPLE_ID" ] || [ "$APPLE_ID" = "SKIP" ]; then
           echo "Notarization credentials not set. Skipping stapling step."
           exit 0
         fi
@@ -939,9 +939,9 @@ jobs:
         }
 
         # Check if WordPress credentials are set
-        if [ -z "$WORDPRESS_USERNAME" ] || [ "$WORDPRESS_USERNAME" = "!" ] || \
-           [ -z "$WORDPRESS_APPLICATION_PASSWORD" ] || [ "$WORDPRESS_APPLICATION_PASSWORD" = "!" ] || \
-           [ -z "$WORDPRESS_SITE" ] || [ "$WORDPRESS_SITE" = "!" ]; then
+        if [ -z "$WORDPRESS_USERNAME" ] || [ "$WORDPRESS_USERNAME" = "SKIP" ] || \
+           [ -z "$WORDPRESS_APPLICATION_PASSWORD" ] || [ "$WORDPRESS_APPLICATION_PASSWORD" = "SKIP" ] || \
+           [ -z "$WORDPRESS_SITE" ] || [ "$WORDPRESS_SITE" = "SKIP" ]; then
           echo "WordPress credentials not set. Skipping WordPress upload step."
           exit 0
         fi
@@ -1035,9 +1035,9 @@ jobs:
         echo "Starting update of download redirect URLs in WordPress..."
         
         # Validate required variables
-        if [ -z "$WORDPRESS_USERNAME" ] || [ "$WORDPRESS_USERNAME" = "!" ] || \
-           [ -z "$WORDPRESS_APPLICATION_PASSWORD" ] || [ "$WORDPRESS_APPLICATION_PASSWORD" = "!" ] || \
-           [ -z "$WORDPRESS_SITE_URL" ] || [ "$WORDPRESS_SITE_URL" = "!" ]; then
+        if [ -z "$WORDPRESS_USERNAME" ] || [ "$WORDPRESS_USERNAME" = "SKIP" ] || \
+           [ -z "$WORDPRESS_APPLICATION_PASSWORD" ] || [ "$WORDPRESS_APPLICATION_PASSWORD" = "SKIP" ] || \
+           [ -z "$WORDPRESS_SITE_URL" ] || [ "$WORDPRESS_SITE_URL" = "SKIP" ]; then
           echo "Error: Missing WordPress credentials or site URL."
           exit 0
         fi
