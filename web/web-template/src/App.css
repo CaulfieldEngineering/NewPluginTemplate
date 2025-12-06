@@ -1,0 +1,71 @@
+/* ============================================================================
+   APP COMPONENT STYLES
+   ============================================================================ */
+
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  overflow-x: hidden;
+}
+
+.app__main {
+  flex: 1;
+  width: 100%;
+  padding: var(--content-padding);
+  padding-top: 100px; /* Account for fixed nav */
+  padding-bottom: 50vh; /* Allow scrolling to highlight last nav item */
+  
+  /* Subtle gradient background - hints of blue, green, purple */
+  background: 
+    radial-gradient(
+      ellipse 120% 80% at 15% 5%,
+      rgba(85, 136, 187, 0.12) 0%,
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 100% 70% at 85% 25%,
+      rgba(136, 102, 170, 0.10) 0%,
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 90% 60% at 25% 75%,
+      rgba(85, 170, 136, 0.055) 0%,
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 100% 80% at 75% 95%,
+      rgba(85, 170, 170, 0.08) 0%,
+      transparent 50%
+    ),
+    var(--color-bg-primary);
+}
+
+.app__content {
+  max-width: var(--content-max-width);
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* Section dividers */
+.app__content > *:not(:first-child) {
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+/* ============================================================================
+   RESPONSIVE ADJUSTMENTS
+   ============================================================================ */
+
+@media (max-width: 768px) {
+  .app__main {
+    padding-top: 80px;
+  }
+}
+
+@media (max-width: 480px) {
+  .app__main {
+    padding-top: 70px;
+    padding-bottom: 40vh;
+  }
+}

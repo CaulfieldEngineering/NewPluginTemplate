@@ -15,9 +15,61 @@ on:
 
 jobs:
 
+  # Job: Detect Changes
+  # Determines which parts of the codebase changed to enable conditional job execution
+  # ==========================================================================================
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      plugin_changed: ${{ steps.changes.outputs.plugin }}
+      is_tag: ${{ steps.check_tag.outputs.is_tag }}
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 2
+
+    - name: Check if this is a tag
+      id: check_tag
+      run: |
+        if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+          echo "is_tag=true" >> $GITHUB_OUTPUT
+        else
+          echo "is_tag=false" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Detect changed paths
+      id: changes
+      run: |
+        # For tags, always build everything
+        if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+          echo "plugin=true" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+        
+        # Get changed files
+        CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || echo "")
+        echo "Changed files:"
+        echo "$CHANGED_FILES"
+        
+        # Check if ONLY web/ files changed (nothing else)
+        NON_WEB_CHANGES=$(echo "$CHANGED_FILES" | grep -vE '^web/' || true)
+        
+        if [ -z "$NON_WEB_CHANGES" ]; then
+          echo "Only web/ files changed - skipping plugin build"
+          echo "plugin=false" >> $GITHUB_OUTPUT
+        else
+          echo "Non-web files changed - running full build"
+          echo "plugin=true" >> $GITHUB_OUTPUT
+        fi
+      shell: bash
+
+
   # Job: Build
   # ==========================================================================================
   build:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.plugin_changed == 'true' || needs.detect-changes.outputs.is_tag == 'true'
     permissions:
       contents: write
 
@@ -83,22 +135,6 @@ jobs:
       shell: bash
       
 
-    # Confirm Tag is of Production Branch, and not Staging - Tag Only
-    # ==========================================================================================
-    - name: Ensure Tag is on Production Branch
-      if: startsWith(github.ref, 'refs/tags/v')
-      shell: bash
-      run: |
-        git fetch origin production
-        TAG_COMMIT=$(git rev-parse HEAD)
-        if git merge-base --is-ancestor $TAG_COMMIT origin/production; then
-          echo "✓ Tag commit is part of production branch history."
-        else
-          echo "::error::Tag commit is NOT based on production branch. Aborting."
-          exit 1
-        fi
-
-
     # Confirm GitHub Tag Matches config.cmake tag - Tags Only
     # ==========================================================================================
     - name: Verify Tag Version Matches Config Version
@@ -115,7 +151,26 @@ jobs:
         fi
     
         echo "✓ Tag and config.cmake versions match"
-    
+
+
+    # Confirm CHANGELOG.md contains entry for this version - Tags Only
+    # ==========================================================================================
+    - name: Verify Changelog Contains Version Entry
+      if: startsWith(github.ref, 'refs/tags/v')
+      shell: bash
+      run: |
+        TAG_VERSION="${GITHUB_REF#refs/tags/v}"
+        echo "Checking CHANGELOG.md for version $TAG_VERSION..."
+        
+        # Look for version header in changelog: ## [X.X.X]
+        if grep -q "## \[$TAG_VERSION\]" CHANGELOG.md; then
+          echo "✓ CHANGELOG.md contains entry for version $TAG_VERSION"
+        else
+          echo "::error::CHANGELOG.md is missing an entry for version $TAG_VERSION"
+          echo "Please add a section: ## [$TAG_VERSION] - $(date +%Y-%m-%d)"
+          exit 1
+        fi
+
 
 # Confirm New Tag is Greater than Previous tags - Tags Only
 # ==========================================================================================
@@ -164,11 +219,132 @@ jobs:
       run: cmake --build ${{github.workspace}}/build --config ${{ matrix.build_type }}
 
 
+
+
     # Production Testing
     # ==========================================================================================
     - name: Run Tests
       run: |
         echo "TODO: Insert test runner here"
+
+
+    # Capture Plugin Screenshot (Windows Only)
+    # Uses PrintWindow API to capture window content regardless of screen position
+    # ==========================================================================================
+    - name: Capture Plugin Screenshot
+      if: matrix.os == 'windows-latest'
+      env:
+        REPOSITORY_NAME: ${{ github.event.repository.name }}
+      shell: pwsh
+      run: |
+        Write-Host "Capturing plugin screenshot..."
+        
+        $exePath = "${{github.workspace}}\build\plugin\${{ env.REPOSITORY_NAME }}_artefacts\Release\Standalone\${{ env.REPOSITORY_NAME }}.exe"
+        $screenshotDir = "${{github.workspace}}\web\public\screenshots"
+        $screenshotPath = "$screenshotDir\screenshot_${{ env.wPROJECT_VERSION }}.png"
+        
+        # Create screenshots directory
+        New-Item -ItemType Directory -Force -Path $screenshotDir | Out-Null
+        
+        Write-Host "Looking for: $exePath"
+        
+        if (Test-Path $exePath) {
+          Write-Host "Found standalone executable"
+          
+          # Start the application
+          Write-Host "Launching standalone..."
+          $process = Start-Process -FilePath $exePath -PassThru
+          
+          # Wait for window to appear and render
+          Start-Sleep -Seconds 5
+          
+          # Load assemblies
+          Add-Type -AssemblyName System.Windows.Forms
+          Add-Type -AssemblyName System.Drawing
+          
+          # Define Win32 functions - using PrintWindow for off-screen capture
+          $win32Code = 'using System; using System.Runtime.InteropServices; public class Win32 { [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect); [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr hWnd, IntPtr hdcBlt, uint nFlags); [DllImport("user32.dll")] public static extern IntPtr GetWindowDC(IntPtr hWnd); [DllImport("user32.dll")] public static extern int ReleaseDC(IntPtr hWnd, IntPtr hDC); [DllImport("gdi32.dll")] public static extern IntPtr CreateCompatibleDC(IntPtr hdc); [DllImport("gdi32.dll")] public static extern IntPtr CreateCompatibleBitmap(IntPtr hdc, int nWidth, int nHeight); [DllImport("gdi32.dll")] public static extern IntPtr SelectObject(IntPtr hdc, IntPtr hgdiobj); [DllImport("gdi32.dll")] public static extern bool DeleteDC(IntPtr hdc); [DllImport("gdi32.dll")] public static extern bool DeleteObject(IntPtr hObject); [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left, Top, Right, Bottom; } public const uint PW_CLIENTONLY = 0x1; public const uint PW_RENDERFULLCONTENT = 0x2; }'
+          Add-Type -TypeDefinition $win32Code -Language CSharp
+          
+          try {
+            $proc = Get-Process -Id $process.Id -ErrorAction SilentlyContinue
+            if ($proc -and $proc.MainWindowHandle -ne 0) {
+              $hwnd = $proc.MainWindowHandle
+              Write-Host "Found window handle: $hwnd"
+              
+              # Get window dimensions
+              $rect = New-Object Win32+RECT
+              [Win32]::GetWindowRect($hwnd, [ref]$rect) | Out-Null
+              
+              $width = $rect.Right - $rect.Left
+              $height = $rect.Bottom - $rect.Top
+              
+              Write-Host "Window size: ${width}x${height}"
+              
+              if ($width -gt 0 -and $height -gt 0) {
+                # Create bitmap to capture into
+                $bitmap = New-Object System.Drawing.Bitmap($width, $height)
+                $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+                $hdc = $graphics.GetHdc()
+                
+                # Use PrintWindow with PW_RENDERFULLCONTENT for complete capture
+                $result = [Win32]::PrintWindow($hwnd, $hdc, 0x2)
+                Write-Host "PrintWindow result: $result"
+                
+                $graphics.ReleaseHdc($hdc)
+                
+                # Crop out title bar (31px) + JUCE audio warning bar (25px) = 56px total
+                $titleBarHeight = 56
+                $croppedHeight = $height - $titleBarHeight
+                $croppedBitmap = New-Object System.Drawing.Bitmap($width, $croppedHeight)
+                $croppedGraphics = [System.Drawing.Graphics]::FromImage($croppedBitmap)
+                $srcRect = New-Object System.Drawing.Rectangle(0, $titleBarHeight, $width, $croppedHeight)
+                $destRect = New-Object System.Drawing.Rectangle(0, 0, $width, $croppedHeight)
+                $croppedGraphics.DrawImage($bitmap, $destRect, $srcRect, [System.Drawing.GraphicsUnit]::Pixel)
+                
+                # Save screenshot
+                $croppedBitmap.Save($screenshotPath, [System.Drawing.Imaging.ImageFormat]::Png)
+                Write-Host "Screenshot saved to: $screenshotPath"
+                
+                $croppedGraphics.Dispose()
+                $croppedBitmap.Dispose()
+                $graphics.Dispose()
+                $bitmap.Dispose()
+              } else {
+                Write-Host "Invalid window dimensions"
+              }
+            } else {
+              Write-Host "Window handle not found"
+            }
+          } catch {
+            Write-Host "Error capturing screenshot: $_"
+          }
+          
+          # Stop the process
+          Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+          
+          if (Test-Path $screenshotPath) {
+            Write-Host "Screenshot captured successfully"
+            Get-Item $screenshotPath
+          } else {
+            Write-Host "Screenshot capture failed"
+          }
+        } else {
+          Write-Host "Could not find standalone executable at: $exePath"
+          Get-ChildItem -Path "${{github.workspace}}\build\plugin" -Recurse -Filter "*.exe" | ForEach-Object { Write-Host $_.FullName }
+        }
+      continue-on-error: true
+
+
+    # Upload Screenshot Artifact (Windows Only)
+    # ==========================================================================================
+    - name: Upload Screenshot Artifact
+      if: matrix.os == 'windows-latest'
+      uses: actions/upload-artifact@v4
+      with:
+        name: plugin-screenshot
+        path: web/public/screenshots/screenshot_*.png
+        if-no-files-found: ignore
 
 
     # Debug; print project variables - All Cases
@@ -767,11 +943,11 @@ jobs:
       id: check_ssh
       shell: bash
       run: |
-        if [ -n "${{ secrets.SSH_ID }}" ]; then
-          echo "ssh_available=true" >> $GITHUB_OUTPUT
-        else
+        if [ -z "${{ secrets.SSH_ID }}" ] || [ "${{ secrets.SSH_ID }}" = "SKIP" ]; then
           echo "ssh_available=false" >> $GITHUB_OUTPUT
-          echo "SSH credentials not set. Skipping SSH-related steps."
+          echo "SSH credentials not set or set to SKIP. Skipping SSH-related steps."
+        else
+          echo "ssh_available=true" >> $GITHUB_OUTPUT
         fi
 
 
@@ -833,7 +1009,7 @@ jobs:
         ssh -vvv CaulfieldEngineering.com exit
 
 
-    # Upload Installers to Server (SCP) - All Cases
+    # Upload Installers to (SCP) - All Cases
     # ==========================================================================================
     - name: Upload Installers to Server (SCP)
       if: steps.check_ssh.outputs.ssh_available == 'true'
@@ -1173,3 +1349,208 @@ jobs:
         # Delete the tag itself
         echo "Deleting tag: $TAG_NAME"
         gh api -X DELETE repos/${GITHUB_REPOSITORY}/git/refs/tags/$TAG_NAME
+
+
+  # Job: Build & Deploy Web Documentation
+  # Always runs - waits for build if build is running, otherwise runs immediately
+  # ==========================================================================================
+  deploy-web:
+    needs: [detect-changes, build]
+    # Always run web deploy (if build ran, wait for it; if skipped, proceed)
+    if: always() && (needs.build.result == 'success' || needs.build.result == 'skipped')
+    runs-on: ubuntu-latest
+    
+    steps:
+    # Checkout Code
+    # ==========================================================================================
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+
+    # Gather project variables from config.cmake
+    # ==========================================================================================
+    - name: Extract and Set Configuration Variables
+      run: |
+        echo "Reading configuration from config.cmake..."
+        while IFS=' ' read -r key value
+        do
+          value=$(echo $value | tr -d '"')  # Remove quotes
+          echo "$key=$value" >> $GITHUB_ENV
+        done < <(grep 'set(w' ${GITHUB_WORKSPACE}/config.cmake | sed -e 's/set(//g' -e 's/)//g' -e 's/\s\+/ /g')
+      shell: bash
+
+
+
+    # Setup Node.js
+    # ==========================================================================================
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+
+    # Install Dependencies
+    # ==========================================================================================
+    - name: Install Dependencies
+      working-directory: web/web-template
+      run: npm install
+
+
+    # Generate Build Configuration for React App
+    # Passes version info and installer URLs to the web build
+    # ==========================================================================================
+    - name: Generate Build Configuration
+      env:
+        REPOSITORY_NAME: ${{ github.event.repository.name }}
+      run: |
+        REPO_NAME=$(echo $GITHUB_REPOSITORY | awk -F / '{print $2}')
+        
+        # Create a config file that React can import (template lives in web/web-template)
+        cat > web/web-template/src/config/buildConfig.json << EOF
+        {
+          "version": "${wPROJECT_VERSION}",
+          "pluginName": "${wPLUGIN_NAME}",
+          "companyName": "${wCOMPANY_NAME}",
+          "repositoryName": "${REPO_NAME}",
+          "buildDate": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+          "isTaggedRelease": ${{ startsWith(github.ref, 'refs/tags/v') }},
+          "installers": {
+            "mac": "${REPO_NAME}MacInstaller_${wPROJECT_VERSION}.pkg",
+            "windows": "${REPO_NAME}WinInstaller_${wPROJECT_VERSION}.exe"
+          },
+          "downloadBaseUrl": "https://caulfieldengineering.com/plug-ins/${REPO_NAME}/uploads"
+        }
+        EOF
+        
+        echo "Generated build configuration:"
+        cat web/web-template/src/config/buildConfig.json
+      shell: bash
+
+
+    # Parse Changelog for React App
+    # ==========================================================================================
+    - name: Ingest Content (markdown + changelog)
+      working-directory: web/web-template
+      run: npm run ingest
+
+
+    # Build React Application
+    # ==========================================================================================
+    - name: Build React Application
+      working-directory: web/web-template
+      run: npm run build
+
+
+    # Upload Build Artifact
+    # ==========================================================================================
+    - name: Upload Web Build Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: web-build
+        path: web/web-template/build/
+
+
+    # Check SSH Credentials Available
+    # ==========================================================================================
+    - name: Check SSH Credentials
+      id: check_ssh
+      shell: bash
+      run: |
+        if [ -z "${{ secrets.SSH_ID }}" ] || [ "${{ secrets.SSH_ID }}" = "SKIP" ]; then
+          echo "ssh_available=false" >> $GITHUB_OUTPUT
+          echo "SSH credentials not set or set to SKIP. Skipping SSH-related steps."
+        else
+          echo "ssh_available=true" >> $GITHUB_OUTPUT
+        fi
+
+
+    # Setup SSH for Server Upload
+    # ==========================================================================================
+    - name: Setup SSH
+      if: steps.check_ssh.outputs.ssh_available == 'true'
+      uses: webfactory/ssh-agent@v0.5.3
+      with:
+        ssh-private-key: ${{ secrets.SSH_ID }}
+
+
+    # Add Host Key
+    # ==========================================================================================
+    - name: Add Host Key
+      if: steps.check_ssh.outputs.ssh_available == 'true'
+      run: |
+        mkdir -p ~/.ssh
+        ssh-keyscan -p 7822 CaulfieldEngineering.com >> ~/.ssh/known_hosts
+
+
+    # Create SSH Config
+    # ==========================================================================================
+    - name: Create SSH Config
+      if: steps.check_ssh.outputs.ssh_available == 'true'
+      shell: bash
+      run: |
+        mkdir -p ~/.ssh
+        echo "Host CaulfieldEngineering.com
+          HostName CaulfieldEngineering.com
+          User caulfiel
+          Port 7822
+          MACs hmac-sha2-256
+          StrictHostKeyChecking no" > ~/.ssh/config
+
+
+    # Upload Web Build to Server (SCP)
+    # ==========================================================================================
+    - name: Upload Web Build to Server (SCP)
+      if: steps.check_ssh.outputs.ssh_available == 'true'
+      env:
+        REPOSITORY_NAME: ${{ github.event.repository.name }}
+      shell: bash
+      run: |
+        set -e  # Exit immediately if any command exits with a non-zero status
+
+        echo "SSH credentials available. Starting web build upload..."
+
+        REPO_NAME=$(echo $GITHUB_REPOSITORY | awk -F / '{print $2}')
+        echo "REPO_NAME set to: $REPO_NAME"
+
+        # Set destination path (root of plugin directory, alongside uploads/)
+        DEST_PATH="/home/caulfiel/public_html/plug-ins/${REPO_NAME}/"
+        SERVER="CaulfieldEngineering.com"
+
+        echo "Checking if destination directory exists on the server..."
+        if ssh $SERVER "test -d $DEST_PATH"; then
+          echo "Directory exists: $DEST_PATH"
+          echo "Clearing existing web content (preserving uploads/ directory)..."
+          # Remove web files but preserve uploads/ directory
+          ssh $SERVER "find ${DEST_PATH} -maxdepth 1 -type f -delete && rm -rf ${DEST_PATH}static ${DEST_PATH}asset-manifest.json"
+        else
+          echo "Directory does not exist, creating directory: $DEST_PATH"
+          if ssh $SERVER "mkdir -p $DEST_PATH"; then
+            echo "Directory created successfully"
+          else
+            echo "Failed to create directory: $DEST_PATH"
+            exit 1
+          fi
+        fi
+
+        echo "Verifying build directory exists..."
+        if [ -d "${GITHUB_WORKSPACE}/web/web-template/build" ]; then
+          echo "✓ Build directory exists"
+        else
+          echo "ERROR: Build directory does not exist"
+          ls -la ${GITHUB_WORKSPACE}/web/
+          exit 1
+        fi
+
+        echo "Beginning SCP Transfer..."
+        echo "Source: ${GITHUB_WORKSPACE}/web/web-template/build/"
+        echo "Destination: $SERVER:$DEST_PATH"
+
+        # Upload all build contents recursively
+        if scp -r ${GITHUB_WORKSPACE}/web/web-template/build/* "$SERVER:$DEST_PATH"; then
+          echo "✓ SCP transfer completed successfully"
+        else
+          echo "ERROR: SCP transfer failed with exit code $?"
+          exit 1
+        fi
+
+        echo "Web documentation deployed to: https://caulfieldengineering.com/plug-ins/${REPO_NAME}/"

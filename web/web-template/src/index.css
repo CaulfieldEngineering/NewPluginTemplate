@@ -1,0 +1,96 @@
+/* ============================================================================
+   GLOBAL STYLES
+   ============================================================================ */
+
+/* CSS Variables for theming - muted, modern minimalist palette */
+:root {
+  --color-bg-primary: #0a0a0b;
+  --color-bg-secondary: #131315;
+  --color-bg-tertiary: #1a1a1e;
+  
+  /* Vibrant accent colors */
+  --color-accent: #7c9cb8;           /* Steel blue */
+  --color-accent-hover: #9ab4cc;     /* Lighter blue on hover */
+  --color-accent-alt: #8a9bab;       /* Alternative blue-grey */
+  --color-highlight: #6b8a9e;        /* Highlight */
+  
+  /* Text colors */
+  --color-text-primary: #eaeaef;
+  --color-text-secondary: #9090a0;
+  --color-text-muted: #606070;
+  
+  /* Richer accent tints for variety */
+  --color-tint-blue: #5588bb;
+  --color-tint-purple: #8866aa;
+  --color-tint-green: #55aa88;
+  --color-tint-cyan: #55aaaa;
+  
+  /* Typography */
+  --font-family-display: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-family-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  
+  /* Responsive spacing */
+  --content-max-width: 1100px;
+  --content-padding: 3rem;
+}
+
+/* Responsive variables */
+@media (max-width: 768px) {
+  :root {
+    --content-padding: 1.5rem;
+  }
+}
+
+@media (max-width: 480px) {
+  :root {
+    --content-padding: 1rem;
+  }
+}
+
+/* Reset & Base Styles */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  scroll-behavior: smooth;
+}
+
+@media (max-width: 480px) {
+  html {
+    font-size: 14px;
+  }
+}
+
+body {
+  font-family: var(--font-family-body);
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  min-height: 100vh;
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+
+#root {
+  min-height: 100vh;
+  width: 100%;
+}
+
+/* Selection */
+::selection {
+  background: var(--color-tint-blue);
+  color: var(--color-text-primary);
+}
+
+/* Ensure images are responsive */
+img {
+  max-width: 100%;
+  height: auto;
+}

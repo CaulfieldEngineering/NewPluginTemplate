@@ -1,0 +1,239 @@
+/* ============================================================================
+   HEADER COMPONENT STYLES
+   ============================================================================ */
+
+.container {
+  text-align: center;
+  padding: 4rem 0 2rem;
+}
+
+.title {
+  font-family: var(--font-family-display);
+  font-size: 3rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  letter-spacing: -0.02em;
+  margin-bottom: 0.5rem;
+}
+
+.subtitle {
+  font-size: 0.9rem;
+  color: var(--color-text-secondary);
+  font-weight: 400;
+  margin-bottom: 1rem;
+}
+
+.description {
+  font-size: 1.25rem;
+  line-height: 1.8;
+  color: var(--color-text-secondary);
+  max-width: 750px;
+  margin: 0 auto 2rem;
+  text-align: center;
+}
+
+/* Screenshot wrapper */
+.screenshotWrapper {
+  margin-top: 2rem;
+  padding: 3rem 1rem 4rem;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow: visible; /* Allow shadow to render outside container */
+}
+
+/* Container for image and ground shadow */
+.imageContainer {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Main screenshot - thick drop shadow for 3D effect */
+.screenshot {
+  max-width: 100%;
+  max-height: 600px;
+  width: auto;
+  height: auto;
+  display: block;
+  position: relative;
+  z-index: 2;
+  cursor: pointer;
+  margin-bottom: 0;
+  
+  /* Sharp rectangular edges - no border radius for square edges */
+  border-radius: 0;
+  
+  /* Bright edge to create "lifted" appearance against dark bg */
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  
+  /* Very tight, sharp drop shadow centered around image - gradient blue/green/purple mix */
+  box-shadow:
+    0 4px 12px 6px rgba(50, 70, 100, 0.7),
+    0 2px 9px 4px rgba(60, 85, 110, 0.65),
+    0 1px 6px 3px rgba(70, 100, 120, 0.6),
+    0 0px 4px 2px rgba(80, 115, 130, 0.55),
+    0 -1px 2px 1px rgba(90, 130, 140, 0.4);
+  
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.screenshot:hover {
+  transform: translateY(-4px);
+  box-shadow:
+    0 5px 15px 8px rgba(45, 65, 95, 0.75),
+    0 3px 11px 5px rgba(55, 80, 105, 0.7),
+    0 2px 8px 4px rgba(65, 95, 115, 0.65),
+    0 1px 6px 3px rgba(75, 110, 125, 0.6),
+    0 0px 4px 2px rgba(85, 125, 135, 0.45);
+}
+
+/* Ground shadow - creates depth beneath the image */
+.groundShadow {
+  position: absolute;
+  bottom: -20px;
+  left: 50%;
+  transform: translateX(-50%) translateZ(-30px) rotateX(85deg) scaleX(1.2);
+  width: 80%;
+  height: 40px;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(0, 0, 0, 0.6) 0%,
+    rgba(0, 0, 0, 0.4) 40%,
+    transparent 100%
+  );
+  filter: blur(15px);
+  opacity: 0.8;
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* Lightbox overlay */
+.lightbox {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.95);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  cursor: zoom-out;
+  padding: 2rem;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.lightboxImage {
+  max-width: 95vw;
+  max-height: 90vh;
+  border-radius: 0;
+  box-shadow: 0 0 100px rgba(0, 0, 0, 0.8);
+}
+
+.lightboxClose {
+  position: absolute;
+  top: 1.5rem;
+  right: 2rem;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 2.5rem;
+  font-weight: 300;
+  cursor: pointer;
+  transition: color 0.2s ease;
+  line-height: 1;
+}
+
+.lightboxClose:hover {
+  color: white;
+}
+
+/* Placeholder for when screenshot is missing */
+.placeholder {
+  width: 100%;
+  max-width: 400px;
+  height: 250px;
+  margin: 0 auto;
+  border-radius: 0;
+  border: 2px dashed rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.02);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 
+    0 8px 16px rgba(0, 0, 0, 0.2),
+    0 20px 50px rgba(0, 0, 0, 0.2);
+}
+
+.placeholderText {
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+  opacity: 0.5;
+}
+
+/* ============================================================================
+   RESPONSIVE
+   ============================================================================ */
+
+@media (max-width: 768px) {
+  .title {
+    font-size: 2.5rem;
+  }
+  
+  .screenshot {
+    max-height: 400px;
+  }
+  
+  .placeholder {
+    max-width: 350px;
+    height: 220px;
+  }
+}
+
+@media (max-width: 480px) {
+  .container {
+    padding: 2rem 0 1rem;
+  }
+  
+  .title {
+    font-size: 2rem;
+  }
+  
+  .subtitle {
+    font-size: 0.85rem;
+    margin-bottom: 1.5rem;
+  }
+  
+  .screenshotWrapper {
+    margin-top: 1rem;
+    padding: 0 0.5rem;
+  }
+  
+  .screenshot {
+    max-height: 280px;
+  }
+  
+  .groundShadow { display: none; }
+  
+  .placeholder {
+    max-width: 100%;
+    height: 180px;
+  }
+  
+  .lightbox {
+    padding: 1rem;
+  }
+  
+  .lightboxClose {
+    top: 1rem;
+    right: 1rem;
+    font-size: 2rem;
+  }
+}

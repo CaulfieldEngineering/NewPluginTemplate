@@ -1,0 +1,113 @@
+/* ============================================================================
+   DOWNLOADS COMPONENT STYLES
+   ============================================================================ */
+
+.container {
+  text-align: center;
+  padding: 4rem 0;
+}
+
+.title {
+  font-family: var(--font-family-display);
+  font-size: 1.75rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: 0.5rem;
+}
+
+.version {
+  font-size: 1rem;
+  color: var(--color-text-secondary);
+  margin-bottom: 2rem;
+}
+
+.buttons {
+  display: flex;
+  gap: 1.5rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.button {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.25rem 2rem;
+  border-radius: 6px;
+  text-decoration: none;
+  transition: all 0.25s ease;
+  min-width: 200px;
+  color: var(--color-text-primary);
+}
+
+.button:hover {
+  transform: translateY(-3px);
+}
+
+.button:active {
+  transform: translateY(0);
+}
+
+/* macOS button - blue/purple gradient */
+.mac {
+  background: linear-gradient(135deg, rgba(85, 136, 187, 0.15), rgba(136, 102, 170, 0.15));
+  border: 1px solid rgba(85, 136, 187, 0.3);
+}
+
+.mac:hover {
+  background: linear-gradient(135deg, rgba(85, 136, 187, 0.25), rgba(136, 102, 170, 0.25));
+  border-color: var(--color-tint-blue);
+  box-shadow: 0 4px 20px rgba(85, 136, 187, 0.2);
+}
+
+/* Windows button - green/cyan gradient */
+.windows {
+  background: linear-gradient(135deg, rgba(85, 170, 136, 0.15), rgba(85, 170, 170, 0.15));
+  border: 1px solid rgba(85, 170, 136, 0.3);
+}
+
+.windows:hover {
+  background: linear-gradient(135deg, rgba(85, 170, 136, 0.25), rgba(85, 170, 170, 0.25));
+  border-color: var(--color-tint-green);
+  box-shadow: 0 4px 20px rgba(85, 170, 136, 0.2);
+}
+
+.iconSvg {
+  width: 1.75rem;
+  height: 1.75rem;
+  flex-shrink: 0;
+  opacity: 0.9;
+}
+
+.label {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+}
+
+.platform {
+  font-weight: 600;
+  font-size: 1.1rem;
+}
+
+.format {
+  font-size: 0.8rem;
+  opacity: 0.6;
+}
+
+/* ============================================================================
+   RESPONSIVE
+   ============================================================================ */
+
+@media (max-width: 400px) {
+  .buttons {
+    flex-direction: column;
+    align-items: center;
+  }
+  
+  .button {
+    width: 100%;
+    max-width: 200px;
+  }
+}

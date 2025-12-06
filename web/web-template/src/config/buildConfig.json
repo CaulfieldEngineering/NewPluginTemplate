@@ -1,0 +1,14 @@
+{
+  "version": "x.x.x",
+  "pluginName": "PluginTitle",
+  "companyName": "CompanyName",
+  "repositoryName": "RepositoryName",
+  "buildDate": "YYYY-MM-DD",
+  "isTaggedRelease": false,
+  "installers": {
+    "mac": "PluginTitleMacInstaller_x.x.x.pkg",
+    "windows": "PluginTitleWinInstaller_x.x.x.exe"
+  },
+  "downloadBaseUrl": "https://example.com/uploads"
+}
+
