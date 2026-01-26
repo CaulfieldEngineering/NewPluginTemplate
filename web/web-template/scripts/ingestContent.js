@@ -12,8 +12,7 @@ const templateRoot = path.join(__dirname, '..');
 const repoRoot = path.join(templateRoot, '..', '..');
 const contentRoot = path.join(templateRoot, '..', 'web-content');
 
-const overviewPath = path.join(contentRoot, 'overview.md');
-const featuresPath = path.join(contentRoot, 'features.md');
+const readmePath = path.join(repoRoot, 'README.md');
 const changelogPath = path.join(repoRoot, 'CHANGELOG.md');
 const screenshotsSrc = path.join(contentRoot, 'assets', 'screenshots');
 const screenshotsDest = path.join(templateRoot, 'public', 'screenshots');
@@ -27,22 +26,61 @@ function ensureDir(dir) {
   }
 }
 
-// Parse overview markdown -> { title, description }
+// ============================================================================
+// README SECTION EXTRACTION
+// Parses README.md and extracts content under specified top-level headers
+// ============================================================================
+
+// Extract content under a specific top-level header (# Header)
+// Returns the raw content between this header and the next top-level header
+function extractSection(md, sectionName) {
+  const lines = md.split('\n');
+  let capturing = false;
+  let sectionLines = [];
+
+  for (const line of lines) {
+    // Check if this is a top-level header (# Header)
+    const headerMatch = line.match(/^# (.+)/);
+
+    if (headerMatch) {
+      // If we were capturing, stop now (we hit the next section)
+      if (capturing) {
+        break;
+      }
+      // Check if this is the section we're looking for (case-insensitive)
+      if (headerMatch[1].trim().toLowerCase() === sectionName.toLowerCase()) {
+        capturing = true;
+      }
+      continue;
+    }
+
+    // Capture content if we're in the target section
+    if (capturing) {
+      sectionLines.push(line);
+    }
+  }
+
+  return sectionLines.join('\n').trim();
+}
+
+// Parse overview section -> { title, description }
 function parseOverview(md) {
-  const lines = md.split('\n').map(line => line.trim());
-  const title = lines.find(line => line.startsWith('#'))?.replace(/^#+\s*/, '') || 'Overview';
+  const overviewContent = extractSection(md, 'Overview');
+  const lines = overviewContent.split('\n').map(line => line.trim());
   const description = lines
     .filter(line => line && !line.startsWith('#'))
     .join(' ')
     .trim();
-  return { title, description };
+  return { title: 'Overview', description };
 }
 
-// Parse features markdown list -> [{ title, description }]
+// Parse features section -> [{ title, description }]
 // Expected format per line: "- Title: Description"
 function parseFeatures(md) {
-  const lines = md.split('\n');
+  const featuresContent = extractSection(md, 'Features');
+  const lines = featuresContent.split('\n');
   const features = [];
+
   for (const rawLine of lines) {
     const line = rawLine.trim();
     if (!line.startsWith('-') && !line.startsWith('*')) continue;
@@ -54,6 +92,7 @@ function parseFeatures(md) {
       features.push({ title, description });
     }
   }
+
   return features;
 }
 
@@ -117,13 +156,10 @@ function copyScreenshots() {
 
 // Main
 try {
-  // Overview
-  const overviewMd = fs.existsSync(overviewPath) ? fs.readFileSync(overviewPath, 'utf8') : '';
-  const overview = parseOverview(overviewMd);
-
-  // Features
-  const featuresMd = fs.existsSync(featuresPath) ? fs.readFileSync(featuresPath, 'utf8') : '';
-  const features = parseFeatures(featuresMd);
+  // Read README.md and extract Overview/Features sections
+  const readmeMd = fs.existsSync(readmePath) ? fs.readFileSync(readmePath, 'utf8') : '';
+  const overview = parseOverview(readmeMd);
+  const features = parseFeatures(readmeMd);
 
   // Changelog
   const changelogMd = fs.existsSync(changelogPath) ? fs.readFileSync(changelogPath, 'utf8') : '';
@@ -145,9 +181,9 @@ try {
   // Copy screenshots
   copyScreenshots();
 
-  console.log('✓ Content ingested from web-content');
-  console.log(`  - Overview -> ${contentJsonPath}`);
-  console.log(`  - Features -> ${contentJsonPath}`);
+  console.log('✓ Content ingested from README.md');
+  console.log(`  - Overview (# Overview section) -> ${contentJsonPath}`);
+  console.log(`  - Features (# Features section) -> ${contentJsonPath}`);
   console.log(`  - Changelog -> ${changelogJsonPath}`);
   console.log(`  - Screenshots -> ${screenshotsDest}`);
 } catch (error) {
