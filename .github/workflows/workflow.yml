@@ -1379,9 +1379,9 @@ jobs:
           StrictHostKeyChecking no" > ~/.ssh/config
 
 
-    # Deploy Web App to Server
+    # Deploy Web App to CaulfieldEngineering.com (every push)
     # ==========================================================================================
-    - name: Deploy Web App to Server
+    - name: Deploy Web App to CaulfieldEngineering.com
       if: steps.check_ssh_web.outputs.ssh_available == 'true'
       env:
         REPOSITORY_NAME: ${{ github.event.repository.name }}
@@ -1392,7 +1392,6 @@ jobs:
         WEB_BUILD_DIR="${GITHUB_WORKSPACE}/build/web"
         WONDERLAB_DIR="${GITHUB_WORKSPACE}/Wonderlab"
 
-        # ---- Deploy to CaulfieldEngineering.com (every push) ----
         CE_SERVER="CaulfieldEngineering.com"
         CE_DEST="/home/caulfiel/public_html/plug-ins/${REPOSITORY_NAME}/web/"
 
@@ -1420,39 +1419,49 @@ jobs:
         echo "  URL: https://caulfieldengineering.com/plug-ins/${REPOSITORY_NAME}/web/"
         echo "==========================================================================="
 
-        # ---- Deploy to WonderlandAudio.com (tagged releases only) ----
-        if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-          echo ""
-          echo "Tagged release — deploying to WonderlandAudio.com..."
 
-          WP_HOST="sftp.wp.com"
-          WP_USER="wonderlandaudio.wordpress.com"
-          WP_DEST="/srv/htdocs/demo/${REPOSITORY_NAME}"
+    # Deploy Web App to WonderlandAudio.com (tagged releases only)
+    # ==========================================================================================
+    - name: Deploy Web App to WonderlandAudio.com
+      if: steps.check_ssh_web.outputs.ssh_available == 'true' && startsWith(github.ref, 'refs/tags/v')
+      env:
+        REPOSITORY_NAME: ${{ github.event.repository.name }}
+      shell: bash
+      run: |
+        set -e
 
-          # Install sshpass for non-interactive SFTP password auth
-          sudo apt-get install -y -q sshpass > /dev/null 2>&1
+        WEB_BUILD_DIR="${GITHUB_WORKSPACE}/build/web"
+        WONDERLAB_DIR="${GITHUB_WORKSPACE}/Wonderlab"
 
-          # Upload web files via SFTP
-          sshpass -p "${{ secrets.WORDPRESS_SFTP_PASS }}" ssh -o StrictHostKeyChecking=no ${WP_USER}@${WP_HOST} "mkdir -p ${WP_DEST}/audio"
+        echo "Tagged release — deploying to WonderlandAudio.com..."
 
-          echo "Uploading web files to WordPress..."
-          sshpass -p "${{ secrets.WORDPRESS_SFTP_PASS }}" scp -o StrictHostKeyChecking=no "${WEB_BUILD_DIR}/index.html" "${WP_USER}@${WP_HOST}:${WP_DEST}/"
-          sshpass -p "${{ secrets.WORDPRESS_SFTP_PASS }}" scp -o StrictHostKeyChecking=no "${WEB_BUILD_DIR}/plugin-config.js" "${WP_USER}@${WP_HOST}:${WP_DEST}/"
-          sshpass -p "${{ secrets.WORDPRESS_SFTP_PASS }}" scp -o StrictHostKeyChecking=no "${WEB_BUILD_DIR}/${REPOSITORY_NAME}Web.js" "${WP_USER}@${WP_HOST}:${WP_DEST}/"
-          sshpass -p "${{ secrets.WORDPRESS_SFTP_PASS }}" scp -o StrictHostKeyChecking=no "${WEB_BUILD_DIR}/${REPOSITORY_NAME}Web.wasm" "${WP_USER}@${WP_HOST}:${WP_DEST}/"
+        WP_HOST="sftp.wp.com"
+        WP_USER="wonderlandaudio.wordpress.com"
+        WP_DEST="/srv/htdocs/demo/${REPOSITORY_NAME}"
 
-          echo "Uploading PHP wrappers..."
-          sshpass -p "${{ secrets.WORDPRESS_SFTP_PASS }}" scp -o StrictHostKeyChecking=no "${WONDERLAB_DIR}/web/index.php" "${WP_USER}@${WP_HOST}:${WP_DEST}/"
-          sshpass -p "${{ secrets.WORDPRESS_SFTP_PASS }}" scp -o StrictHostKeyChecking=no "${WONDERLAB_DIR}/web/serve.php" "${WP_USER}@${WP_HOST}:${WP_DEST}/"
+        # Install sshpass for non-interactive SFTP password auth
+        sudo apt-get install -y -q sshpass > /dev/null 2>&1
 
-          if [ -d "${WEB_BUILD_DIR}/audio" ]; then
-            echo "Uploading audio samples..."
-            sshpass -p "${{ secrets.WORDPRESS_SFTP_PASS }}" scp -o StrictHostKeyChecking=no "${WEB_BUILD_DIR}/audio/"* "${WP_USER}@${WP_HOST}:${WP_DEST}/audio/"
-          fi
+        # Upload web files via SFTP
+        sshpass -p "${{ secrets.WORDPRESS_SFTP_PASS }}" ssh -o StrictHostKeyChecking=no ${WP_USER}@${WP_HOST} "mkdir -p ${WP_DEST}/audio"
 
-          echo ""
-          echo "==========================================================================="
-          echo "  WonderlandAudio.com deployed (production)"
-          echo "  URL: https://wonderlandaudio.com/demo/${REPOSITORY_NAME}/"
-          echo "==========================================================================="
+        echo "Uploading web files to WordPress..."
+        sshpass -p "${{ secrets.WORDPRESS_SFTP_PASS }}" scp -o StrictHostKeyChecking=no "${WEB_BUILD_DIR}/index.html" "${WP_USER}@${WP_HOST}:${WP_DEST}/"
+        sshpass -p "${{ secrets.WORDPRESS_SFTP_PASS }}" scp -o StrictHostKeyChecking=no "${WEB_BUILD_DIR}/plugin-config.js" "${WP_USER}@${WP_HOST}:${WP_DEST}/"
+        sshpass -p "${{ secrets.WORDPRESS_SFTP_PASS }}" scp -o StrictHostKeyChecking=no "${WEB_BUILD_DIR}/${REPOSITORY_NAME}Web.js" "${WP_USER}@${WP_HOST}:${WP_DEST}/"
+        sshpass -p "${{ secrets.WORDPRESS_SFTP_PASS }}" scp -o StrictHostKeyChecking=no "${WEB_BUILD_DIR}/${REPOSITORY_NAME}Web.wasm" "${WP_USER}@${WP_HOST}:${WP_DEST}/"
+
+        echo "Uploading PHP wrappers..."
+        sshpass -p "${{ secrets.WORDPRESS_SFTP_PASS }}" scp -o StrictHostKeyChecking=no "${WONDERLAB_DIR}/web/index.php" "${WP_USER}@${WP_HOST}:${WP_DEST}/"
+        sshpass -p "${{ secrets.WORDPRESS_SFTP_PASS }}" scp -o StrictHostKeyChecking=no "${WONDERLAB_DIR}/web/serve.php" "${WP_USER}@${WP_HOST}:${WP_DEST}/"
+
+        if [ -d "${WEB_BUILD_DIR}/audio" ]; then
+          echo "Uploading audio samples..."
+          sshpass -p "${{ secrets.WORDPRESS_SFTP_PASS }}" scp -o StrictHostKeyChecking=no "${WEB_BUILD_DIR}/audio/"* "${WP_USER}@${WP_HOST}:${WP_DEST}/audio/"
         fi
+
+        echo ""
+        echo "==========================================================================="
+        echo "  WonderlandAudio.com deployed (production)"
+        echo "  URL: https://wonderlandaudio.com/demo/${REPOSITORY_NAME}/"
+        echo "==========================================================================="
