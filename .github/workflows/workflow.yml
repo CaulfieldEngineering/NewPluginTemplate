@@ -18,7 +18,7 @@ jobs:
   # Job: Build
   # ==========================================================================================
   build:
-    if: github.event.repository.name != 'NewPluginTemplate'
+    if: github.event.repository.name != 'NewPluginTemplate' && !contains(github.event.head_commit.message, 'Initial commit')
     permissions:
       contents: write
 
@@ -1130,7 +1130,7 @@ jobs:
   # to CaulfieldEngineering.com/plug-ins/{repo_name}/web/
   # ==========================================================================================
   web-build:
-    if: github.event.repository.name != 'NewPluginTemplate'
+    if: github.event.repository.name != 'NewPluginTemplate' && !contains(github.event.head_commit.message, 'Initial commit')
     needs: build
     runs-on: ubuntu-latest
     permissions:
