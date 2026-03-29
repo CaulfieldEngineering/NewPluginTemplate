@@ -16,7 +16,7 @@ NewPluginTemplate  ──(gh repo create --template)──→  New plugin repo
                                                     run_local scripts (ready to use)
 ```
 
-New repos are created from this template using `NewRepositoryScript/NewRepositoryWin.bat`, which also sets up GitHub secrets automatically.
+New repos are created from this template using `NewRepositoryScript/NewRepositoryMac.sh` (or `NewRepositoryWin.bat` on Windows), which also sets up GitHub secrets automatically.
 
 ## How to customize for a new plugin
 
@@ -51,11 +51,13 @@ The run_local scripts, CI/CD pipeline, and installer configs all read from `conf
 WizardCore (shared DSP library) is pulled in automatically via CPM in `CMakeLists.txt` and linked in `plugin/CMakeLists.txt`. To use a module:
 
 ```cpp
-#include "WizardCore/LFO/LFO.h"
-// WizardCore:: namespace — see WizardCore/CLAUDE.md for full reference
+#include "Chorus/Chorus.h"   // NOT "WizardCore/Chorus/Chorus.h"
+#include "LFO/LFO.h"
+#include "DelayLine/DelayLine.h"
+// WizardCore:: C++ namespace — see WizardCore/CLAUDE.md for full reference
 ```
 
-No CMake changes needed to access existing WizardCore modules.
+The include root is the WizardCore `plugin/source/` directory. Include paths are `Module/Module.h`, not `WizardCore/Module/Module.h`. No CMake changes needed to access existing WizardCore modules.
 
 ## Local builds
 
@@ -74,6 +76,13 @@ The GitHub Actions workflow builds on both Mac and Windows automatically on push
 
 Plugin source files are auto-discovered by `plugin/createSourceList.py`, which generates `plugin/sourceListResult.cmake`. You do not need to manually register new `.cpp` files in CMake — just add them to `plugin/source/` and they will be picked up on the next CMake configure.
 
+## Repo name vs plugin name
+
+The GitHub repository name and `wPLUGIN_NAME` in `config.cmake` can differ (e.g., repo=`concept-fattener`, plugin=`Fattener`). JUCE generates all build artifacts under `wPLUGIN_NAME`. The CI/CD workflow uses `wPLUGIN_NAME` for artifact paths, package names, installer filenames, and web build outputs. It uses the repository name only for server deploy directory paths and URL slugs.
+
+**Never hardcode product names in the workflow, run_local scripts, or package configs.** Everything is driven by `config.cmake`.
+
 ## Branch convention
 
-`staging` is the main branch.
+- `staging` — active development branch (default). Pushes here deploy the web app to CaulfieldEngineering.com.
+- `main` — production release target. Tags on `main` deploy installers to WordPress and the web app to WonderlandAudio.com.
