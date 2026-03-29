@@ -71,9 +71,12 @@ namespace audio_plugin {
 
     void AudioPluginAudioProcessor::prepareToPlay(double sampleRate,
                                                 int samplesPerBlock) {
-    // Use this method as the place to do any pre-playback
-    // initialisation that you need..
-    juce::ignoreUnused(sampleRate, samplesPerBlock);
+    juce::ignoreUnused(samplesPerBlock);
+
+    if (mIsDemoVersion) {
+        mSamplesUntilDisable = static_cast<int64_t>(mDemoActiveSeconds * sampleRate);
+        mSamplesUntilEnable  = static_cast<int64_t>(mDemoBypassSeconds * sampleRate);
+    }
     }
 
     void AudioPluginAudioProcessor::releaseResources() {
@@ -128,6 +131,24 @@ namespace audio_plugin {
     // the samples and the outer loop is handling the channels.
     // Alternatively, you can process the samples with the channels
     // interleaved by keeping the same state.
+    // Demo nag cycle: active for N seconds, bypassed for M seconds
+    if (mIsDemoVersion) {
+        mSampleCounter += buffer.getNumSamples();
+
+        if (mEffectEnabled) {
+            if (mSampleCounter >= mSamplesUntilDisable) {
+                mEffectEnabled = false;
+                mSampleCounter = 0;
+            }
+        } else {
+            if (mSampleCounter >= mSamplesUntilEnable) {
+                mEffectEnabled = true;
+                mSampleCounter = 0;
+            }
+        }
+    }
+
+    // DSP processing — gate on mEffectEnabled for demo support
     for (int channel = 0; channel < totalNumInputChannels; ++channel) {
         auto *channelData = buffer.getWritePointer(channel);
         juce::ignoreUnused(channelData);
@@ -172,6 +193,21 @@ namespace audio_plugin {
     }
     }
     
+    // ============================================================================
+    // DEMO / ACTIVATION
+    // ============================================================================
+    void AudioPluginAudioProcessor::setDemoState(bool demoState) {
+        mIsDemoVersion = demoState;
+
+        if (mIsDemoVersion) {
+            mSamplesUntilDisable = static_cast<int64_t>(mDemoActiveSeconds * getSampleRate());
+            mSamplesUntilEnable  = static_cast<int64_t>(mDemoBypassSeconds * getSampleRate());
+        }
+
+        mSampleCounter = 0;
+        mEffectEnabled = true;
+    }
+
     // ============================================================================
     // PARAMETER LAYOUT CREATION
     // ============================================================================

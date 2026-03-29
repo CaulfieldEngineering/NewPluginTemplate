@@ -76,9 +76,15 @@ The GitHub Actions workflow builds on both Mac and Windows automatically on push
 
 Plugin source files are auto-discovered by `plugin/createSourceList.py`, which generates `plugin/sourceListResult.cmake`. You do not need to manually register new `.cpp` files in CMake — just add them to `plugin/source/` and they will be picked up on the next CMake configure.
 
-## Wonderlab web build requirement
+## Demo / activation system
 
-The Wonderlab framework's `MainTemplate.cpp` calls `processor->setDemoState(false)` on every plugin. The processor class must have a `void setDemoState(bool) {}` method (can be a no-op stub) or the web build will fail.
+Every plugin has a built-in demo nag cycle: active for 50 seconds, then bypassed for 10 seconds, repeating. Controlled by:
+
+- `setDemoState(bool)` — called by Wonderlab (`false` = full version) and by serial key activation
+- `isEffectEnabled()` — check this before applying DSP; returns `false` during demo bypass windows
+- `mIsDemoVersion` defaults to `true` — new plugins start in demo mode
+
+The Wonderlab web build calls `processor->setDemoState(false)` so the web demo always runs as full version. This method **must** exist on the processor or the web build will fail.
 
 ## Repo name vs plugin name
 

@@ -35,8 +35,12 @@ namespace audio_plugin {
     void getStateInformation(juce::MemoryBlock &destData) override;
     void setStateInformation(const void *data, int sizeInBytes) override;
 
-    // Required by Wonderlab web build framework
-    void setDemoState(bool) {}
+    // ============================================================================
+    // DEMO / ACTIVATION
+    // ============================================================================
+    bool getDemoState() const { return mIsDemoVersion; }
+    void setDemoState(bool demoState);
+    bool isEffectEnabled() const { return mEffectEnabled; }
 
     private:
     // ============================================================================
@@ -44,12 +48,23 @@ namespace audio_plugin {
     // ============================================================================
     juce::AudioProcessorValueTreeState mParameterTree;
     juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
-    
+
     // ============================================================================
     // PARAMETER ACCESS
     // ============================================================================
     juce::AudioProcessorValueTreeState& getParameterTree() { return mParameterTree; }
-    
+
+    // ============================================================================
+    // DEMO STATE
+    // ============================================================================
+    bool mIsDemoVersion { true };
+    bool mEffectEnabled { true };
+    int mDemoActiveSeconds { 50 };
+    int mDemoBypassSeconds { 10 };
+    int64_t mSampleCounter { 0 };
+    int64_t mSamplesUntilDisable { 0 };
+    int64_t mSamplesUntilEnable { 0 };
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AudioPluginAudioProcessor)
     };
 } // namespace audio_plugin
