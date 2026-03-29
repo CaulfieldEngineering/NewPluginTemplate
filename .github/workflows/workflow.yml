@@ -15,61 +15,9 @@ on:
 
 jobs:
 
-  # Job: Detect Changes
-  # Determines which parts of the codebase changed to enable conditional job execution
-  # ==========================================================================================
-  detect-changes:
-    runs-on: ubuntu-latest
-    outputs:
-      plugin_changed: ${{ steps.changes.outputs.plugin }}
-      is_tag: ${{ steps.check_tag.outputs.is_tag }}
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 2
-
-    - name: Check if this is a tag
-      id: check_tag
-      run: |
-        if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-          echo "is_tag=true" >> $GITHUB_OUTPUT
-        else
-          echo "is_tag=false" >> $GITHUB_OUTPUT
-        fi
-
-    - name: Detect changed paths
-      id: changes
-      run: |
-        # For tags, always build everything
-        if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-          echo "plugin=true" >> $GITHUB_OUTPUT
-          exit 0
-        fi
-        
-        # Get changed files
-        CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || echo "")
-        echo "Changed files:"
-        echo "$CHANGED_FILES"
-        
-        # Check if ONLY web/ files changed (nothing else)
-        NON_WEB_CHANGES=$(echo "$CHANGED_FILES" | grep -vE '^web/' || true)
-        
-        if [ -z "$NON_WEB_CHANGES" ]; then
-          echo "Only web/ files changed - skipping plugin build"
-          echo "plugin=false" >> $GITHUB_OUTPUT
-        else
-          echo "Non-web files changed - running full build"
-          echo "plugin=true" >> $GITHUB_OUTPUT
-        fi
-      shell: bash
-
-
   # Job: Build
   # ==========================================================================================
   build:
-    needs: detect-changes
-    if: needs.detect-changes.outputs.plugin_changed == 'true' || needs.detect-changes.outputs.is_tag == 'true'
     permissions:
       contents: write
 
@@ -135,6 +83,22 @@ jobs:
       shell: bash
       
 
+    # Confirm Tag is of Production Branch, and not Staging - Tag Only
+    # ==========================================================================================
+    - name: Ensure Tag is on Production Branch
+      if: startsWith(github.ref, 'refs/tags/v')
+      shell: bash
+      run: |
+        git fetch origin main
+        TAG_COMMIT=$(git rev-parse HEAD)
+        if git merge-base --is-ancestor $TAG_COMMIT origin/main; then
+          echo "✓ Tag commit is part of main branch history."
+        else
+          echo "::error::Tag commit is NOT based on main branch. Aborting."
+          exit 1
+        fi
+
+
     # Confirm GitHub Tag Matches config.cmake tag - Tags Only
     # ==========================================================================================
     - name: Verify Tag Version Matches Config Version
@@ -151,26 +115,7 @@ jobs:
         fi
     
         echo "✓ Tag and config.cmake versions match"
-
-
-    # Confirm CHANGELOG.md contains entry for this version - Tags Only
-    # ==========================================================================================
-    - name: Verify Changelog Contains Version Entry
-      if: startsWith(github.ref, 'refs/tags/v')
-      shell: bash
-      run: |
-        TAG_VERSION="${GITHUB_REF#refs/tags/v}"
-        echo "Checking CHANGELOG.md for version $TAG_VERSION..."
-        
-        # Look for version header in changelog: ## [X.X.X]
-        if grep -q "## \[$TAG_VERSION\]" CHANGELOG.md; then
-          echo "✓ CHANGELOG.md contains entry for version $TAG_VERSION"
-        else
-          echo "::error::CHANGELOG.md is missing an entry for version $TAG_VERSION"
-          echo "Please add a section: ## [$TAG_VERSION] - $(date +%Y-%m-%d)"
-          exit 1
-        fi
-
+    
 
 # Confirm New Tag is Greater than Previous tags - Tags Only
 # ==========================================================================================
@@ -219,132 +164,11 @@ jobs:
       run: cmake --build ${{github.workspace}}/build --config ${{ matrix.build_type }}
 
 
-
-
     # Production Testing
     # ==========================================================================================
     - name: Run Tests
       run: |
         echo "TODO: Insert test runner here"
-
-
-    # Capture Plugin Screenshot (Windows Only)
-    # Uses PrintWindow API to capture window content regardless of screen position
-    # ==========================================================================================
-    - name: Capture Plugin Screenshot
-      if: matrix.os == 'windows-latest'
-      env:
-        REPOSITORY_NAME: ${{ github.event.repository.name }}
-      shell: pwsh
-      run: |
-        Write-Host "Capturing plugin screenshot..."
-        
-        $exePath = "${{github.workspace}}\build\plugin\${{ env.REPOSITORY_NAME }}_artefacts\Release\Standalone\${{ env.REPOSITORY_NAME }}.exe"
-        $screenshotDir = "${{github.workspace}}\web\public\screenshots"
-        $screenshotPath = "$screenshotDir\screenshot_${{ env.wPROJECT_VERSION }}.png"
-        
-        # Create screenshots directory
-        New-Item -ItemType Directory -Force -Path $screenshotDir | Out-Null
-        
-        Write-Host "Looking for: $exePath"
-        
-        if (Test-Path $exePath) {
-          Write-Host "Found standalone executable"
-          
-          # Start the application
-          Write-Host "Launching standalone..."
-          $process = Start-Process -FilePath $exePath -PassThru
-          
-          # Wait for window to appear and render
-          Start-Sleep -Seconds 5
-          
-          # Load assemblies
-          Add-Type -AssemblyName System.Windows.Forms
-          Add-Type -AssemblyName System.Drawing
-          
-          # Define Win32 functions - using PrintWindow for off-screen capture
-          $win32Code = 'using System; using System.Runtime.InteropServices; public class Win32 { [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect); [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr hWnd, IntPtr hdcBlt, uint nFlags); [DllImport("user32.dll")] public static extern IntPtr GetWindowDC(IntPtr hWnd); [DllImport("user32.dll")] public static extern int ReleaseDC(IntPtr hWnd, IntPtr hDC); [DllImport("gdi32.dll")] public static extern IntPtr CreateCompatibleDC(IntPtr hdc); [DllImport("gdi32.dll")] public static extern IntPtr CreateCompatibleBitmap(IntPtr hdc, int nWidth, int nHeight); [DllImport("gdi32.dll")] public static extern IntPtr SelectObject(IntPtr hdc, IntPtr hgdiobj); [DllImport("gdi32.dll")] public static extern bool DeleteDC(IntPtr hdc); [DllImport("gdi32.dll")] public static extern bool DeleteObject(IntPtr hObject); [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left, Top, Right, Bottom; } public const uint PW_CLIENTONLY = 0x1; public const uint PW_RENDERFULLCONTENT = 0x2; }'
-          Add-Type -TypeDefinition $win32Code -Language CSharp
-          
-          try {
-            $proc = Get-Process -Id $process.Id -ErrorAction SilentlyContinue
-            if ($proc -and $proc.MainWindowHandle -ne 0) {
-              $hwnd = $proc.MainWindowHandle
-              Write-Host "Found window handle: $hwnd"
-              
-              # Get window dimensions
-              $rect = New-Object Win32+RECT
-              [Win32]::GetWindowRect($hwnd, [ref]$rect) | Out-Null
-              
-              $width = $rect.Right - $rect.Left
-              $height = $rect.Bottom - $rect.Top
-              
-              Write-Host "Window size: ${width}x${height}"
-              
-              if ($width -gt 0 -and $height -gt 0) {
-                # Create bitmap to capture into
-                $bitmap = New-Object System.Drawing.Bitmap($width, $height)
-                $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
-                $hdc = $graphics.GetHdc()
-                
-                # Use PrintWindow with PW_RENDERFULLCONTENT for complete capture
-                $result = [Win32]::PrintWindow($hwnd, $hdc, 0x2)
-                Write-Host "PrintWindow result: $result"
-                
-                $graphics.ReleaseHdc($hdc)
-                
-                # Crop out title bar (31px) + JUCE audio warning bar (25px) = 56px total
-                $titleBarHeight = 56
-                $croppedHeight = $height - $titleBarHeight
-                $croppedBitmap = New-Object System.Drawing.Bitmap($width, $croppedHeight)
-                $croppedGraphics = [System.Drawing.Graphics]::FromImage($croppedBitmap)
-                $srcRect = New-Object System.Drawing.Rectangle(0, $titleBarHeight, $width, $croppedHeight)
-                $destRect = New-Object System.Drawing.Rectangle(0, 0, $width, $croppedHeight)
-                $croppedGraphics.DrawImage($bitmap, $destRect, $srcRect, [System.Drawing.GraphicsUnit]::Pixel)
-                
-                # Save screenshot
-                $croppedBitmap.Save($screenshotPath, [System.Drawing.Imaging.ImageFormat]::Png)
-                Write-Host "Screenshot saved to: $screenshotPath"
-                
-                $croppedGraphics.Dispose()
-                $croppedBitmap.Dispose()
-                $graphics.Dispose()
-                $bitmap.Dispose()
-              } else {
-                Write-Host "Invalid window dimensions"
-              }
-            } else {
-              Write-Host "Window handle not found"
-            }
-          } catch {
-            Write-Host "Error capturing screenshot: $_"
-          }
-          
-          # Stop the process
-          Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
-          
-          if (Test-Path $screenshotPath) {
-            Write-Host "Screenshot captured successfully"
-            Get-Item $screenshotPath
-          } else {
-            Write-Host "Screenshot capture failed"
-          }
-        } else {
-          Write-Host "Could not find standalone executable at: $exePath"
-          Get-ChildItem -Path "${{github.workspace}}\build\plugin" -Recurse -Filter "*.exe" | ForEach-Object { Write-Host $_.FullName }
-        }
-      continue-on-error: true
-
-
-    # Upload Screenshot Artifact (Windows Only)
-    # ==========================================================================================
-    - name: Upload Screenshot Artifact
-      if: matrix.os == 'windows-latest'
-      uses: actions/upload-artifact@v4
-      with:
-        name: plugin-screenshot
-        path: web/public/screenshots/screenshot_*.png
-        if-no-files-found: ignore
 
 
     # Debug; print project variables - All Cases
@@ -384,12 +208,7 @@ jobs:
       id: check_secrets
       shell: bash
       run: |
-        if [ -z "${{ secrets.AZURE_TENANT_ID }}" ] || [ "${{ secrets.AZURE_TENANT_ID }}" = "SKIP" ] || \
-           [ -z "${{ secrets.AZURE_CLIENT_ID }}" ] || [ "${{ secrets.AZURE_CLIENT_ID }}" = "SKIP" ] || \
-           [ -z "${{ secrets.AZURE_CLIENT_SECRET }}" ] || [ "${{ secrets.AZURE_CLIENT_SECRET }}" = "SKIP" ] || \
-           [ -z "${{ secrets.AZURE_ENDPOINT }}" ] || [ "${{ secrets.AZURE_ENDPOINT }}" = "SKIP" ] || \
-           [ -z "${{ secrets.AZURE_CODE_SIGNING_NAME }}" ] || [ "${{ secrets.AZURE_CODE_SIGNING_NAME }}" = "SKIP" ] || \
-           [ -z "${{ secrets.AZURE_CERT_PROFILE_NAME }}" ] || [ "${{ secrets.AZURE_CERT_PROFILE_NAME }}" = "SKIP" ]; then
+        if [ -z "${{ secrets.AZURE_TENANT_ID }}" ] || [ -z "${{ secrets.AZURE_CLIENT_ID }}" ] || [ -z "${{ secrets.AZURE_CLIENT_SECRET }}" ] || [ -z "${{ secrets.AZURE_ENDPOINT }}" ] || [ -z "${{ secrets.AZURE_CODE_SIGNING_NAME }}" ] || [ -z "${{ secrets.AZURE_CERT_PROFILE_NAME }}" ]; then
           echo "Required secrets for Azure signing are not set. Skipping signing step."
           echo "proceed=false" >> $GITHUB_OUTPUT
         else
@@ -427,9 +246,7 @@ jobs:
         REPOSITORY_NAME: ${{ github.event.repository.name }}
       run: |
         # Check for required secrets
-        if [ -z "$APPLICATION_CERTIFICATE_BASE64" ] || [ "$APPLICATION_CERTIFICATE_BASE64" = "SKIP" ] || \
-           [ -z "$CERTIFICATE_PASSWORD" ] || [ "$CERTIFICATE_PASSWORD" = "SKIP" ] || \
-           [ -z "$KEYCHAIN_PASSWORD" ] || [ "$KEYCHAIN_PASSWORD" = "SKIP" ]; then
+        if [ -z "$APPLICATION_CERTIFICATE_BASE64" ] || [ -z "$CERTIFICATE_PASSWORD" ] || [ -z "$KEYCHAIN_PASSWORD" ]; then
           echo "Required secrets for application signing are not set. Skipping application signing step."
           exit 0
         fi
@@ -614,9 +431,7 @@ jobs:
         REPOSITORY_NAME: ${{ github.event.repository.name }}
       run: |
         # Check for required secrets
-        if [ -z "$INSTALLER_CERTIFICATE_BASE64" ] || [ "$INSTALLER_CERTIFICATE_BASE64" = "SKIP" ] || \
-           [ -z "$CERTIFICATE_PASSWORD" ] || [ "$CERTIFICATE_PASSWORD" = "SKIP" ] || \
-           [ -z "$KEYCHAIN_PASSWORD" ] || [ "$KEYCHAIN_PASSWORD" = "SKIP" ]; then
+        if [ -z "$INSTALLER_CERTIFICATE_BASE64" ] || [ -z "$CERTIFICATE_PASSWORD" ] || [ -z "$KEYCHAIN_PASSWORD" ]; then
           echo "Required secrets for installer signing are not set. Skipping installer signing step."
           exit 0
         fi
@@ -750,9 +565,7 @@ jobs:
         REPOSITORY_NAME: ${{ github.event.repository.name }}
       run: |
         # Check for required secrets
-        if [ -z "$INSTALLER_CERTIFICATE_BASE64" ] || [ "$INSTALLER_CERTIFICATE_BASE64" = "SKIP" ] || \
-           [ -z "$CERTIFICATE_PASSWORD" ] || [ "$CERTIFICATE_PASSWORD" = "SKIP" ] || \
-           [ -z "$KEYCHAIN_PASSWORD" ] || [ "$KEYCHAIN_PASSWORD" = "SKIP" ]; then
+        if [ -z "$INSTALLER_CERTIFICATE_BASE64" ] || [ -z "$CERTIFICATE_PASSWORD" ] || [ -z "$KEYCHAIN_PASSWORD" ]; then
           echo "Required secrets for installer signing are not set. Skipping installer signing step."
           exit 0
         fi
@@ -818,9 +631,7 @@ jobs:
         REPOSITORY_NAME: ${{ github.event.repository.name }}
       run: |
         # Check for required secrets
-        if [ -z "$APPLE_ID" ] || [ "$APPLE_ID" = "SKIP" ] || \
-           [ -z "$APPLE_TEAM_ID" ] || [ "$APPLE_TEAM_ID" = "SKIP" ] || \
-           [ -z "$APPLE_APP_SPECIFIC_PASSWORD" ] || [ "$APPLE_APP_SPECIFIC_PASSWORD" = "SKIP" ]; then
+        if [ -z "$APPLE_ID" ] || [ -z "$APPLE_TEAM_ID" ] || [ -z "$APPLE_APP_SPECIFIC_PASSWORD" ]; then
           echo "Required secrets for notarization are not set. Skipping notarization step."
           exit 0
         fi
@@ -900,7 +711,7 @@ jobs:
         APPLE_ID: ${{ secrets.APPLE_ID }}  # Used to check if notarization was run
       run: |
         # Check if notarization was meant to run
-        if [ -z "$APPLE_ID" ] || [ "$APPLE_ID" = "SKIP" ]; then
+        if [ -z "$APPLE_ID" ]; then
           echo "Notarization credentials not set. Skipping stapling step."
           exit 0
         fi
@@ -937,154 +748,6 @@ jobs:
           build/*Installer_*.exe
 
 
-    # Check SSH Credentials Available - All Cases
-    # ==========================================================================================
-    - name: Check SSH Credentials
-      id: check_ssh
-      shell: bash
-      run: |
-        if [ -z "${{ secrets.SSH_ID }}" ] || [ "${{ secrets.SSH_ID }}" = "SKIP" ]; then
-          echo "ssh_available=false" >> $GITHUB_OUTPUT
-          echo "SSH credentials not set or set to SKIP. Skipping SSH-related steps."
-        else
-          echo "ssh_available=true" >> $GITHUB_OUTPUT
-        fi
-
-
-    # Setup SSH for Server Upload - All Cases
-    # ==========================================================================================
-    - name: Setup SSH
-      if: steps.check_ssh.outputs.ssh_available == 'true'
-      uses: webfactory/ssh-agent@v0.5.3
-      with:
-        ssh-private-key: ${{ secrets.SSH_ID }}
-
-
-    # Add Host Key (Windows) - All Cases
-    # ==========================================================================================
-    - name: Add Host Key (Windows)
-      if: steps.check_ssh.outputs.ssh_available == 'true' && matrix.os == 'windows-latest'
-      shell: pwsh
-      run: |
-        if (-Not (Test-Path -Path $HOME/.ssh)) {
-          New-Item -ItemType Directory -Path $HOME/.ssh
-        }
-        ssh-keyscan -p 7822 CaulfieldEngineering.com | Out-File -Append -Encoding ascii $HOME/.ssh/known_hosts
-
-
-    # Add Host Key (macOS) - All Cases
-    # ==========================================================================================
-    - name: Add Host Key (macOS)
-      if: steps.check_ssh.outputs.ssh_available == 'true' && matrix.os == 'macos-latest'
-      run: |
-        mkdir -p ~/.ssh
-        ssh-keyscan -p 7822 CaulfieldEngineering.com >> ~/.ssh/known_hosts
-
-
-    # Create SSH Config - All Cases
-    # ==========================================================================================
-    - name: Create SSH Config
-      if: steps.check_ssh.outputs.ssh_available == 'true'
-      shell: bash
-      run: |
-        mkdir -p ~/.ssh
-        echo "Host CaulfieldEngineering.com
-          HostName CaulfieldEngineering.com
-          User caulfiel
-          Port 7822
-          MACs hmac-sha2-256
-          StrictHostKeyChecking no" > ~/.ssh/config
-
-
-    # Verify SSH Connection - All Cases
-    # ==========================================================================================
-    - name: Verify SSH Key and Connection
-      if: steps.check_ssh.outputs.ssh_available == 'true'
-      shell: bash
-      run: |
-        echo "Checking loaded SSH keys:"
-        ssh-add -l
-        
-        echo "Attempting SSH connection:"
-        ssh -vvv CaulfieldEngineering.com exit
-
-
-    # Upload Installers to (SCP) - All Cases
-    # ==========================================================================================
-    - name: Upload Installers to Server (SCP)
-      if: steps.check_ssh.outputs.ssh_available == 'true'
-      env:
-        REPOSITORY_NAME: ${{ github.event.repository.name }}
-      shell: bash
-      run: |
-        set -e  # Exit immediately if any command exits with a non-zero status
-
-        echo "SSH credentials available. Starting server upload..."
-
-        echo "Starting upload process to server..."
-        DEST_DIR="${{ matrix.os == 'windows-latest' && 'win' || 'mac' }}"
-        echo "DEST_DIR set to: $DEST_DIR"
-
-        REPO_NAME=$(echo $GITHUB_REPOSITORY | awk -F / '{print $2}')
-        echo "REPO_NAME set to: $REPO_NAME"
-
-        # Determine the suffix based on the version
-        SUFFIX=""
-        if [[ "${{ matrix.version }}" == "Demo" ]]; then
-          SUFFIX=".D"
-        fi
-
-        # Set source file based on OS
-        if [ "${{ matrix.os }}" == "macos-latest" ]; then
-          SOURCE_FILE="${GITHUB_WORKSPACE}/build/${REPO_NAME}MacInstaller_${wPROJECT_VERSION}${SUFFIX}.pkg"
-          echo "macOS build: SOURCE_FILE set to $SOURCE_FILE"
-        elif [ "${{ matrix.os }}" == "windows-latest" ]; then
-          SOURCE_FILE="${GITHUB_WORKSPACE}/build/${REPO_NAME}WinInstaller_${wPROJECT_VERSION}${SUFFIX}.exe"
-          echo "Windows build: SOURCE_FILE set to $SOURCE_FILE"
-        else
-          echo "Unsupported OS: ${{ matrix.os }}"
-          exit 1
-        fi
-
-        # Set destination path
-        DEST_PATH="/home/caulfiel/public_html/plug-ins/${REPO_NAME}/uploads/${DEST_DIR}/"
-        SERVER="CaulfieldEngineering.com"
-
-        echo "Checking if destination directory exists on the server..."
-        if ssh $SERVER "test -d $DEST_PATH"; then
-          echo "Directory exists: $DEST_PATH"
-        else
-          echo "Directory does not exist, creating directory: $DEST_PATH"
-          if ssh $SERVER "mkdir -p $DEST_PATH"; then
-            echo "Directory created successfully"
-          else
-            echo "Failed to create directory: $DEST_PATH"
-            exit 1
-          fi
-        fi
-
-        echo "Verifying source file exists..."
-        if [ -f "$SOURCE_FILE" ]; then
-          echo "✓ Source file exists: $SOURCE_FILE"
-        else
-          echo "ERROR: Source file does not exist: $SOURCE_FILE"
-          echo "Contents of build directory:"
-          ls -la ${GITHUB_WORKSPACE}/build/
-          exit 1
-        fi
-
-        echo "Beginning SCP Transfer..."
-        echo "Source file: $SOURCE_FILE"
-        echo "Destination: $SERVER:$DEST_PATH"
-
-        if scp -v "$SOURCE_FILE" "$SERVER:$DEST_PATH"; then
-          echo "✓ SCP transfer completed successfully"
-        else
-          echo "ERROR: SCP transfer failed with exit code $?"
-          exit 1
-        fi
-
-
     # Upload Installers to WordPress Media Library - Tag Only
     # ==========================================================================================
     - name: Upload Installers to WordPress
@@ -1115,9 +778,7 @@ jobs:
         }
 
         # Check if WordPress credentials are set
-        if [ -z "$WORDPRESS_USERNAME" ] || [ "$WORDPRESS_USERNAME" = "SKIP" ] || \
-           [ -z "$WORDPRESS_APPLICATION_PASSWORD" ] || [ "$WORDPRESS_APPLICATION_PASSWORD" = "SKIP" ] || \
-           [ -z "$WORDPRESS_SITE" ] || [ "$WORDPRESS_SITE" = "SKIP" ]; then
+        if [ -z "$WORDPRESS_USERNAME" ] || [ -z "$WORDPRESS_APPLICATION_PASSWORD" ] || [ -z "$WORDPRESS_SITE" ]; then
           echo "WordPress credentials not set. Skipping WordPress upload step."
           exit 0
         fi
@@ -1211,9 +872,7 @@ jobs:
         echo "Starting update of download redirect URLs in WordPress..."
         
         # Validate required variables
-        if [ -z "$WORDPRESS_USERNAME" ] || [ "$WORDPRESS_USERNAME" = "SKIP" ] || \
-           [ -z "$WORDPRESS_APPLICATION_PASSWORD" ] || [ "$WORDPRESS_APPLICATION_PASSWORD" = "SKIP" ] || \
-           [ -z "$WORDPRESS_SITE_URL" ] || [ "$WORDPRESS_SITE_URL" = "SKIP" ]; then
+        if [ -z "$WORDPRESS_USERNAME" ] || [ -z "$WORDPRESS_APPLICATION_PASSWORD" ] || [ -z "$WORDPRESS_SITE_URL" ]; then
           echo "Error: Missing WordPress credentials or site URL."
           exit 0
         fi
@@ -1311,6 +970,124 @@ jobs:
         echo "Redirect URLs updated successfully."
 
 
+
+
+
+    # Check SSH Credentials Available
+    # ==========================================================================================
+    - name: Check SSH Credentials
+      id: check_ssh
+      shell: bash
+      run: |
+        if [ -z "${{ secrets.SSH_ID }}" ] || [ "${{ secrets.SSH_ID }}" = "SKIP" ]; then
+          echo "ssh_available=false" >> $GITHUB_OUTPUT
+          echo "SSH credentials not set or set to SKIP. Skipping SSH-related steps."
+        else
+          echo "ssh_available=true" >> $GITHUB_OUTPUT
+        fi
+
+
+    # Setup SSH for Server Upload
+    # ==========================================================================================
+    - name: Setup SSH
+      if: steps.check_ssh.outputs.ssh_available == 'true'
+      uses: webfactory/ssh-agent@v0.5.3
+      with:
+        ssh-private-key: ${{ secrets.SSH_ID }}
+
+
+    # Add Host Key
+    # ==========================================================================================
+    - name: Add Host Key
+      if: steps.check_ssh.outputs.ssh_available == 'true'
+      shell: bash
+      run: |
+        mkdir -p ~/.ssh
+        ssh-keyscan -p 7822 CaulfieldEngineering.com >> ~/.ssh/known_hosts
+
+
+    # Create SSH Config
+    # ==========================================================================================
+    - name: Create SSH Config
+      if: steps.check_ssh.outputs.ssh_available == 'true'
+      shell: bash
+      run: |
+        mkdir -p ~/.ssh
+        echo "Host CaulfieldEngineering.com
+          HostName CaulfieldEngineering.com
+          User caulfiel
+          Port 7822
+          MACs hmac-sha2-256
+          StrictHostKeyChecking no" > ~/.ssh/config
+
+
+    # Upload Installer to Server (SCP)
+    # ==========================================================================================
+    - name: Upload Installer to Server (SCP)
+      if: steps.check_ssh.outputs.ssh_available == 'true'
+      env:
+        REPOSITORY_NAME: ${{ github.event.repository.name }}
+      shell: bash
+      run: |
+        set -e  # Exit immediately if any command exits with a non-zero status
+
+        echo "SSH credentials available. Starting installer upload..."
+
+        REPO_NAME=$(echo $GITHUB_REPOSITORY | awk -F / '{print $2}')
+        echo "REPO_NAME set to: $REPO_NAME"
+
+        # Set destination path (installers subfolder)
+        DEST_PATH="/home/caulfiel/public_html/plug-ins/${REPO_NAME}/installers/"
+        SERVER="CaulfieldEngineering.com"
+
+        echo "Checking if destination directory exists on the server..."
+        if ssh $SERVER "test -d $DEST_PATH"; then
+          echo "Directory exists: $DEST_PATH"
+        else
+          echo "Directory does not exist, creating directory: $DEST_PATH"
+          if ssh $SERVER "mkdir -p $DEST_PATH"; then
+            echo "Directory created successfully"
+          else
+            echo "Failed to create directory: $DEST_PATH"
+            exit 1
+          fi
+        fi
+
+        # Upload installer for current OS
+        if [ "${{ matrix.os }}" == "windows-latest" ]; then
+          INSTALLER_PATH="${GITHUB_WORKSPACE}/build/${REPO_NAME}WinInstaller_${wPROJECT_VERSION}.exe"
+          INSTALLER_NAME="${REPO_NAME}WinInstaller_${wPROJECT_VERSION}.exe"
+        elif [ "${{ matrix.os }}" == "macos-latest" ]; then
+          INSTALLER_PATH="${GITHUB_WORKSPACE}/build/${REPO_NAME}MacInstaller_${wPROJECT_VERSION}.pkg"
+          INSTALLER_NAME="${REPO_NAME}MacInstaller_${wPROJECT_VERSION}.pkg"
+        else
+          echo "Unsupported OS for installer upload"
+          INSTALLER_PATH=""
+        fi
+
+        if [ -n "$INSTALLER_PATH" ] && [ -f "$INSTALLER_PATH" ]; then
+          echo "✓ Found installer: $INSTALLER_NAME"
+          echo "Uploading installer to: $SERVER:$DEST_PATH"
+          
+          if scp "$INSTALLER_PATH" "$SERVER:$DEST_PATH$INSTALLER_NAME"; then
+            echo "✓ Installer uploaded successfully: $INSTALLER_NAME"
+          else
+            echo "ERROR: Installer upload failed with exit code $?"
+            exit 1
+          fi
+        else
+          echo "ERROR: Installer not found at: $INSTALLER_PATH"
+          exit 1
+        fi
+
+        echo "Installer deployed to: https://caulfieldengineering.com/plug-ins/${REPO_NAME}/${INSTALLER_NAME}"
+
+
+
+
+
+
+
     # Install GitHub CLI - Tag Only
     # ==========================================================================================
     - name: Install GitHub CLI
@@ -1351,145 +1128,246 @@ jobs:
         gh api -X DELETE repos/${GITHUB_REPOSITORY}/git/refs/tags/$TAG_NAME
 
 
-  # Job: Build & Deploy Web Documentation
-  # Always runs - waits for build if build is running, otherwise runs immediately
+  # Job: Web Build (Wonderlab)
   # ==========================================================================================
-  deploy-web:
-    needs: [detect-changes, build]
-    # Always run web deploy (if build ran, wait for it; if skipped, proceed)
-    if: always() && (needs.build.result == 'success' || needs.build.result == 'skipped')
+  # Builds the plugin to WebAssembly using the Wonderlab framework and deploys
+  # to CaulfieldEngineering.com/plug-ins/{repo_name}/web/
+  # ==========================================================================================
+  web-build:
+    needs: build
     runs-on: ubuntu-latest
-    
+    permissions:
+      contents: read
+
     steps:
-    # Checkout Code
+
+    # Checkout Plugin Code
     # ==========================================================================================
-    - name: Checkout code
+    - name: Checkout Plugin Code
       uses: actions/checkout@v4
 
 
-    # Gather project variables from config.cmake
+    # Checkout Wonderlab Framework
     # ==========================================================================================
-    - name: Extract and Set Configuration Variables
+    - name: Checkout Wonderlab
+      uses: actions/checkout@v4
+      with:
+        repository: CaulfieldEngineering/Wonderlab
+        path: Wonderlab
+        token: ${{ secrets.CE_GITHUB_PAT }}
+
+
+    # Read Project Configuration
+    # ==========================================================================================
+    - name: Read Project Configuration
+      shell: bash
       run: |
         echo "Reading configuration from config.cmake..."
-        while IFS=' ' read -r key value
-        do
-          value=$(echo $value | tr -d '"')  # Remove quotes
+        while IFS=' ' read -r key value; do
+          value=$(echo $value | tr -d '"')
           echo "$key=$value" >> $GITHUB_ENV
         done < <(grep 'set(w' ${GITHUB_WORKSPACE}/config.cmake | sed -e 's/set(//g' -e 's/)//g' -e 's/\s\+/ /g')
-      shell: bash
 
 
-
-    # Setup Node.js
+    # Install Emscripten SDK
     # ==========================================================================================
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
+    - name: Install Emscripten SDK
+      uses: mymindstorm/setup-emsdk@v14
       with:
-        node-version: '20'
+        version: 5.0.3
 
 
-    # Install Dependencies
+    # Install Ninja Build System
     # ==========================================================================================
-    - name: Install Dependencies
-      working-directory: web/web-template
-      run: npm install
+    - name: Install Ninja
+      run: sudo apt-get install -y ninja-build
 
 
-    # Generate Build Configuration for React App
-    # Passes version info and installer URLs to the web build
+    # Install Linux Dependencies (required for JUCE native configure)
     # ==========================================================================================
-    - name: Generate Build Configuration
+    - name: Install Linux Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxcomposite-dev \
+          libfreetype-dev libfontconfig1-dev \
+          libasound2-dev \
+          libgl-dev \
+          libcurl4-openssl-dev \
+          libwebkit2gtk-4.1-dev libgtk-3-dev
+
+
+    # Generate BinaryData (native CMake configure only)
+    # ==========================================================================================
+    - name: Generate BinaryData
+      run: |
+        echo "Running native CMake configure + BinaryData build..."
+        cmake -S . -B build -DBUILD_DEMO=OFF
+        cmake --build build --target ${wPLUGIN_NAME}BinaryData
+        echo "Locating BinaryData.h..."
+        find build -name "BinaryData.h" -type f
+        echo "BinaryData generated."
+
+
+    # Build WebAssembly
+    # ==========================================================================================
+    - name: Build WebAssembly
       env:
         REPOSITORY_NAME: ${{ github.event.repository.name }}
-      run: |
-        REPO_NAME=$(echo $GITHUB_REPOSITORY | awk -F / '{print $2}')
-        
-        # Create a config file that React can import (template lives in web/web-template)
-        cat > web/web-template/src/config/buildConfig.json << EOF
-        {
-          "version": "${wPROJECT_VERSION}",
-          "pluginName": "${wPLUGIN_NAME}",
-          "companyName": "${wCOMPANY_NAME}",
-          "repositoryName": "${REPO_NAME}",
-          "buildDate": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-          "isTaggedRelease": ${{ startsWith(github.ref, 'refs/tags/v') }},
-          "installers": {
-            "mac": "${REPO_NAME}MacInstaller_${wPROJECT_VERSION}.pkg",
-            "windows": "${REPO_NAME}WinInstaller_${wPROJECT_VERSION}.exe"
-          },
-          "downloadBaseUrl": "https://caulfieldengineering.com/plug-ins/${REPO_NAME}/uploads"
-        }
-        EOF
-        
-        echo "Generated build configuration:"
-        cat web/web-template/src/config/buildConfig.json
-
-        # Patch homepage in package.json to use this repo's name
-        sed -i "s|REPO_NAME_PLACEHOLDER|${REPO_NAME}|g" web/web-template/package.json
-        echo "Patched package.json homepage to: /plug-ins/${REPO_NAME}"
       shell: bash
+      run: |
+        set -e
+
+        WONDERLAB_DIR="${GITHUB_WORKSPACE}/Wonderlab"
+        PLUGIN_SRC_DIR="${GITHUB_WORKSPACE}/plugin/source"
+        WEB_BUILD_DIR="${GITHUB_WORKSPACE}/build/web"
+        echo "Plugin:  ${wPLUGIN_NAME} v${wPROJECT_VERSION}"
+        echo "Sources: ${PLUGIN_SRC_DIR}"
+        echo ""
+
+        # Find BinaryData.h dynamically (path varies by platform)
+        BINARY_DATA_DIR=$(dirname "$(find ${GITHUB_WORKSPACE}/build -name 'BinaryData.h' -type f | head -1)")
+        if [ -z "${BINARY_DATA_DIR}" ] || [ ! -f "${BINARY_DATA_DIR}/BinaryData.h" ]; then
+          echo "ERROR: BinaryData.h not found anywhere in build/"
+          find ${GITHUB_WORKSPACE}/build -name "BinaryData*" 2>/dev/null
+          exit 1
+        fi
+        echo "BinaryData found at: ${BINARY_DATA_DIR}"
+
+        # Create build directory
+        mkdir -p "${WEB_BUILD_DIR}"
+        cd "${WEB_BUILD_DIR}"
+
+        # Generate CMakeLists.txt
+        echo "Generating CMakeLists.txt..."
+        {
+          echo 'cmake_minimum_required(VERSION 3.15)'
+          echo "project(${wPLUGIN_NAME}Web LANGUAGES C CXX)"
+          echo 'set(CMAKE_CXX_STANDARD 20)'
+          echo 'set(CMAKE_CXX_STANDARD_REQUIRED ON)'
+          echo ''
+          echo "set(PLUGIN_NAME \"${wPLUGIN_NAME}\")"
+          echo "set(PLUGIN_VERSION \"${wPROJECT_VERSION}\")"
+          echo "set(PLUGIN_SRC_DIR \"${PLUGIN_SRC_DIR}\")"
+          echo "set(WONDERLAB_DIR \"${WONDERLAB_DIR}\")"
+          echo 'set(PLUGIN_PROCESSOR_HEADER "PluginProcessor.h")'
+          echo 'set(PLUGIN_PROCESSOR_CLASS audio_plugin::AudioPluginAudioProcessor)'
+          echo "set(PLUGIN_EXTRA_INCLUDE_DIRS \"${BINARY_DATA_DIR}\")"
+          echo "set(PLUGIN_EXTRA_SOURCE_DIRS \"${BINARY_DATA_DIR}\")"
+          echo ''
+          echo 'include(${WONDERLAB_DIR}/cmake/WonderlabBuild.cmake)'
+        } > CMakeLists.txt
+
+        # Configure with Emscripten
+        echo "Configuring Emscripten..."
+        emcmake cmake -G Ninja -S . -B . -DCMAKE_BUILD_TYPE=Release
+
+        # Build
+        echo "Compiling WebAssembly..."
+        emmake ninja
+
+        WASM_SIZE=$(stat -c%s "${REPOSITORY_NAME}Web.wasm" 2>/dev/null || echo "unknown")
+        echo "WASM size: ${WASM_SIZE} bytes"
 
 
-    # Parse Changelog for React App
+    # Assemble Web App
     # ==========================================================================================
-    - name: Ingest Content (markdown + changelog)
-      working-directory: web/web-template
-      run: npm run ingest
+    - name: Assemble Web App
+      env:
+        REPOSITORY_NAME: ${{ github.event.repository.name }}
+      shell: bash
+      run: |
+        set -e
+
+        WONDERLAB_DIR="${GITHUB_WORKSPACE}/Wonderlab"
+        WEB_BUILD_DIR="${GITHUB_WORKSPACE}/build/web"
+        SAMPLE_DIR="${GITHUB_WORKSPACE}/plugin/sample_audio"
+
+        echo "Assembling web app..."
+
+        # Copy Wonderlab web host files
+        cp "${WONDERLAB_DIR}/web/index.html" "${WEB_BUILD_DIR}/index.html"
+        # juce-audio-worklet.js no longer needed (replaced by C++ Wasm Audio Worklet)
+
+        # Copy sample audio tracks
+        TRACK_LIST=""
+        if [ -d "${SAMPLE_DIR}" ]; then
+          echo "Copying sample audio tracks..."
+          mkdir -p "${WEB_BUILD_DIR}/audio"
+          for f in "${SAMPLE_DIR}"/*; do
+            [ -f "$f" ] || continue
+            cp "$f" "${WEB_BUILD_DIR}/audio/"
+            fname=$(basename "$f")
+            title="${fname%.*}"
+            if [ -n "${TRACK_LIST}" ]; then
+              TRACK_LIST="${TRACK_LIST}, { title: '${title}', file: 'audio/${fname}' }"
+            else
+              TRACK_LIST="{ title: '${title}', file: 'audio/${fname}' }"
+            fi
+            echo "  + ${fname}"
+          done
+        else
+          echo "No sample_audio folder found."
+        fi
+
+        # Generate plugin-config.js
+        echo "Generating plugin-config.js..."
+        {
+          echo "window.WONDERLAB_CONFIG = {"
+          echo "    pluginName: '${wPLUGIN_NAME}',"
+          echo "    pluginWidth: 750,"
+          echo "    pluginHeight: 515,"
+          echo "    wasmJs: '${wPLUGIN_NAME}Web.js',"
+          echo "    tracks: [${TRACK_LIST}]"
+          echo "};"
+        } > "${WEB_BUILD_DIR}/plugin-config.js"
+
+        # List final web app contents
+        echo ""
+        echo "Web app contents:"
+        ls -la "${WEB_BUILD_DIR}/"
+        if [ -d "${WEB_BUILD_DIR}/audio" ]; then
+          ls -la "${WEB_BUILD_DIR}/audio/"
+        fi
 
 
-    # Build React Application
+    # Check SSH Credentials for Web Deploy
     # ==========================================================================================
-    - name: Build React Application
-      working-directory: web/web-template
-      run: npm run build
-
-
-    # Upload Build Artifact
-    # ==========================================================================================
-    - name: Upload Web Build Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: web-build
-        path: web/web-template/build/
-
-
-    # Check SSH Credentials Available
-    # ==========================================================================================
-    - name: Check SSH Credentials
-      id: check_ssh
+    - name: Check SSH Credentials (Web)
+      id: check_ssh_web
       shell: bash
       run: |
         if [ -z "${{ secrets.SSH_ID }}" ] || [ "${{ secrets.SSH_ID }}" = "SKIP" ]; then
           echo "ssh_available=false" >> $GITHUB_OUTPUT
-          echo "SSH credentials not set or set to SKIP. Skipping SSH-related steps."
+          echo "SSH credentials not set. Skipping web deploy."
         else
           echo "ssh_available=true" >> $GITHUB_OUTPUT
         fi
 
 
-    # Setup SSH for Server Upload
+    # Setup SSH for Web Deploy
     # ==========================================================================================
-    - name: Setup SSH
-      if: steps.check_ssh.outputs.ssh_available == 'true'
+    - name: Setup SSH (Web)
+      if: steps.check_ssh_web.outputs.ssh_available == 'true'
       uses: webfactory/ssh-agent@v0.5.3
       with:
         ssh-private-key: ${{ secrets.SSH_ID }}
 
 
-    # Add Host Key
+    # Add Host Key (Web)
     # ==========================================================================================
-    - name: Add Host Key
-      if: steps.check_ssh.outputs.ssh_available == 'true'
+    - name: Add Host Key (Web)
+      if: steps.check_ssh_web.outputs.ssh_available == 'true'
+      shell: bash
       run: |
         mkdir -p ~/.ssh
         ssh-keyscan -p 7822 CaulfieldEngineering.com >> ~/.ssh/known_hosts
 
 
-    # Create SSH Config
+    # Create SSH Config (Web)
     # ==========================================================================================
-    - name: Create SSH Config
-      if: steps.check_ssh.outputs.ssh_available == 'true'
+    - name: Create SSH Config (Web)
+      if: steps.check_ssh_web.outputs.ssh_available == 'true'
       shell: bash
       run: |
         mkdir -p ~/.ssh
@@ -1501,60 +1379,80 @@ jobs:
           StrictHostKeyChecking no" > ~/.ssh/config
 
 
-    # Upload Web Build to Server (SCP)
+    # Deploy Web App to Server
     # ==========================================================================================
-    - name: Upload Web Build to Server (SCP)
-      if: steps.check_ssh.outputs.ssh_available == 'true'
+    - name: Deploy Web App to Server
+      if: steps.check_ssh_web.outputs.ssh_available == 'true'
       env:
         REPOSITORY_NAME: ${{ github.event.repository.name }}
       shell: bash
       run: |
-        set -e  # Exit immediately if any command exits with a non-zero status
+        set -e
 
-        echo "SSH credentials available. Starting web build upload..."
+        WEB_BUILD_DIR="${GITHUB_WORKSPACE}/build/web"
+        WONDERLAB_DIR="${GITHUB_WORKSPACE}/Wonderlab"
 
-        REPO_NAME=$(echo $GITHUB_REPOSITORY | awk -F / '{print $2}')
-        echo "REPO_NAME set to: $REPO_NAME"
+        # ---- Deploy to CaulfieldEngineering.com (every push) ----
+        CE_SERVER="CaulfieldEngineering.com"
+        CE_DEST="/home/caulfiel/public_html/plug-ins/${REPOSITORY_NAME}/web/"
 
-        # Set destination path (root of plugin directory, alongside uploads/)
-        DEST_PATH="/home/caulfiel/public_html/plug-ins/${REPO_NAME}/"
-        SERVER="CaulfieldEngineering.com"
+        echo "Deploying web app to ${CE_SERVER}:${CE_DEST}..."
 
-        echo "Checking if destination directory exists on the server..."
-        if ssh $SERVER "test -d $DEST_PATH"; then
-          echo "Directory exists: $DEST_PATH"
-          echo "Clearing existing web content (preserving uploads/ directory)..."
-          # Remove web files but preserve uploads/ directory
-          ssh $SERVER "find ${DEST_PATH} -maxdepth 1 -type f -delete && rm -rf ${DEST_PATH}static ${DEST_PATH}asset-manifest.json"
-        else
-          echo "Directory does not exist, creating directory: $DEST_PATH"
-          if ssh $SERVER "mkdir -p $DEST_PATH"; then
-            echo "Directory created successfully"
-          else
-            echo "Failed to create directory: $DEST_PATH"
-            exit 1
+        ssh $CE_SERVER "mkdir -p ${CE_DEST} ${CE_DEST}audio/"
+
+        echo "Uploading web files..."
+        scp "${WEB_BUILD_DIR}/index.html" "$CE_SERVER:${CE_DEST}"
+        scp "${WEB_BUILD_DIR}/plugin-config.js" "$CE_SERVER:${CE_DEST}"
+        scp "${WEB_BUILD_DIR}/${REPOSITORY_NAME}Web.js" "$CE_SERVER:${CE_DEST}"
+        scp "${WEB_BUILD_DIR}/${REPOSITORY_NAME}Web.wasm" "$CE_SERVER:${CE_DEST}"
+
+        if [ -d "${WEB_BUILD_DIR}/audio" ]; then
+          echo "Uploading audio samples..."
+          scp "${WEB_BUILD_DIR}/audio/"* "$CE_SERVER:${CE_DEST}audio/"
+        fi
+
+        echo "Uploading .htaccess..."
+        scp "${WONDERLAB_DIR}/web/htaccess" "$CE_SERVER:${CE_DEST}.htaccess"
+
+        echo ""
+        echo "==========================================================================="
+        echo "  CaulfieldEngineering.com deployed"
+        echo "  URL: https://caulfieldengineering.com/plug-ins/${REPOSITORY_NAME}/web/"
+        echo "==========================================================================="
+
+        # ---- Deploy to WonderlandAudio.com (tagged releases only) ----
+        if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+          echo ""
+          echo "Tagged release — deploying to WonderlandAudio.com..."
+
+          WP_HOST="sftp.wp.com"
+          WP_USER="wonderlandaudio.wordpress.com"
+          WP_DEST="/srv/htdocs/demo/${REPOSITORY_NAME}"
+
+          # Install sshpass for non-interactive SFTP password auth
+          sudo apt-get install -y -q sshpass > /dev/null 2>&1
+
+          # Upload web files via SFTP
+          sshpass -p "${{ secrets.WORDPRESS_SFTP_PASS }}" ssh -o StrictHostKeyChecking=no ${WP_USER}@${WP_HOST} "mkdir -p ${WP_DEST}/audio"
+
+          echo "Uploading web files to WordPress..."
+          sshpass -p "${{ secrets.WORDPRESS_SFTP_PASS }}" scp -o StrictHostKeyChecking=no "${WEB_BUILD_DIR}/index.html" "${WP_USER}@${WP_HOST}:${WP_DEST}/"
+          sshpass -p "${{ secrets.WORDPRESS_SFTP_PASS }}" scp -o StrictHostKeyChecking=no "${WEB_BUILD_DIR}/plugin-config.js" "${WP_USER}@${WP_HOST}:${WP_DEST}/"
+          sshpass -p "${{ secrets.WORDPRESS_SFTP_PASS }}" scp -o StrictHostKeyChecking=no "${WEB_BUILD_DIR}/${REPOSITORY_NAME}Web.js" "${WP_USER}@${WP_HOST}:${WP_DEST}/"
+          sshpass -p "${{ secrets.WORDPRESS_SFTP_PASS }}" scp -o StrictHostKeyChecking=no "${WEB_BUILD_DIR}/${REPOSITORY_NAME}Web.wasm" "${WP_USER}@${WP_HOST}:${WP_DEST}/"
+
+          echo "Uploading PHP wrappers..."
+          sshpass -p "${{ secrets.WORDPRESS_SFTP_PASS }}" scp -o StrictHostKeyChecking=no "${WONDERLAB_DIR}/web/index.php" "${WP_USER}@${WP_HOST}:${WP_DEST}/"
+          sshpass -p "${{ secrets.WORDPRESS_SFTP_PASS }}" scp -o StrictHostKeyChecking=no "${WONDERLAB_DIR}/web/serve.php" "${WP_USER}@${WP_HOST}:${WP_DEST}/"
+
+          if [ -d "${WEB_BUILD_DIR}/audio" ]; then
+            echo "Uploading audio samples..."
+            sshpass -p "${{ secrets.WORDPRESS_SFTP_PASS }}" scp -o StrictHostKeyChecking=no "${WEB_BUILD_DIR}/audio/"* "${WP_USER}@${WP_HOST}:${WP_DEST}/audio/"
           fi
+
+          echo ""
+          echo "==========================================================================="
+          echo "  WonderlandAudio.com deployed (production)"
+          echo "  URL: https://wonderlandaudio.com/demo/${REPOSITORY_NAME}/"
+          echo "==========================================================================="
         fi
-
-        echo "Verifying build directory exists..."
-        if [ -d "${GITHUB_WORKSPACE}/web/web-template/build" ]; then
-          echo "✓ Build directory exists"
-        else
-          echo "ERROR: Build directory does not exist"
-          ls -la ${GITHUB_WORKSPACE}/web/
-          exit 1
-        fi
-
-        echo "Beginning SCP Transfer..."
-        echo "Source: ${GITHUB_WORKSPACE}/web/web-template/build/"
-        echo "Destination: $SERVER:$DEST_PATH"
-
-        # Upload all build contents recursively
-        if scp -r ${GITHUB_WORKSPACE}/web/web-template/build/* "$SERVER:$DEST_PATH"; then
-          echo "✓ SCP transfer completed successfully"
-        else
-          echo "ERROR: SCP transfer failed with exit code $?"
-          exit 1
-        fi
-
-        echo "Web documentation deployed to: https://caulfieldengineering.com/plug-ins/${REPO_NAME}/"
