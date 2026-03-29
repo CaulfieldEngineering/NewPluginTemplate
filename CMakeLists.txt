@@ -112,6 +112,17 @@ CPMAddPackage(
     SOURCE_DIR ${LIB_DIR}/juce
 )
 
+# This downloads the WizardCore shared DSP/utility library.
+# WizardCore provides reusable audio modules (Chorus, LFO, DelayLine, etc.)
+# under the WizardCore:: CMake namespace. See plugin/CMakeLists.txt for usage.
+# =====================================================================
+CPMAddPackage(
+    NAME WizardCore
+    GIT_TAG staging  # ← Tracks latest WizardCore. Pin to a version tag at ship time.
+    GITHUB_REPOSITORY CaulfieldEngineering/WizardCore
+    SOURCE_DIR ${LIB_DIR}/wizardcore
+)
+
 # Adds googletest.
 # =====================================================================
 # CPMAddPackage(
