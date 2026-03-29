@@ -18,6 +18,7 @@ jobs:
   # Job: Build
   # ==========================================================================================
   build:
+    if: github.event.repository.name != 'NewPluginTemplate'
     permissions:
       contents: write
 
@@ -1129,6 +1130,7 @@ jobs:
   # to CaulfieldEngineering.com/plug-ins/{repo_name}/web/
   # ==========================================================================================
   web-build:
+    if: github.event.repository.name != 'NewPluginTemplate'
     needs: build
     runs-on: ubuntu-latest
     permissions:
