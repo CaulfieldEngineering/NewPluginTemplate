@@ -1296,6 +1296,7 @@ jobs:
           mkdir -p "${WEB_BUILD_DIR}/audio"
           for f in "${SAMPLE_DIR}"/*; do
             [ -f "$f" ] || continue
+            [[ "$(basename "$f")" == "README.md" ]] && continue
             cp "$f" "${WEB_BUILD_DIR}/audio/"
             fname=$(basename "$f")
             title="${fname%.*}"
@@ -1405,7 +1406,7 @@ jobs:
         scp "${WEB_BUILD_DIR}/${wPLUGIN_NAME}Web.js" "$CE_SERVER:${CE_DEST}"
         scp "${WEB_BUILD_DIR}/${wPLUGIN_NAME}Web.wasm" "$CE_SERVER:${CE_DEST}"
 
-        if [ -d "${WEB_BUILD_DIR}/audio" ]; then
+        if ls "${WEB_BUILD_DIR}/audio/"* >/dev/null 2>&1; then
           echo "Uploading audio samples..."
           scp "${WEB_BUILD_DIR}/audio/"* "$CE_SERVER:${CE_DEST}audio/"
         fi
@@ -1455,7 +1456,7 @@ jobs:
         sshpass -p "${{ secrets.WORDPRESS_SFTP_PASS }}" scp -o StrictHostKeyChecking=no "${WONDERLAB_DIR}/web/index.php" "${WP_USER}@${WP_HOST}:${WP_DEST}/"
         sshpass -p "${{ secrets.WORDPRESS_SFTP_PASS }}" scp -o StrictHostKeyChecking=no "${WONDERLAB_DIR}/web/serve.php" "${WP_USER}@${WP_HOST}:${WP_DEST}/"
 
-        if [ -d "${WEB_BUILD_DIR}/audio" ]; then
+        if ls "${WEB_BUILD_DIR}/audio/"* >/dev/null 2>&1; then
           echo "Uploading audio samples..."
           sshpass -p "${{ secrets.WORDPRESS_SFTP_PASS }}" scp -o StrictHostKeyChecking=no "${WEB_BUILD_DIR}/audio/"* "${WP_USER}@${WP_HOST}:${WP_DEST}/audio/"
         fi
