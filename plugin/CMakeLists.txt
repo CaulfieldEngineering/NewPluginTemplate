@@ -4,6 +4,20 @@ cmake_minimum_required(VERSION 3.22)
 # =====================================================================
 project(${wPLUGIN_NAME} VERSION ${wPROJECT_VERSION})
 
+# Force the use of the static runtime (/MT or /MTd) for MSVC
+# =====================================================================
+# This MUST be set BEFORE juce_add_plugin() to ensure JUCE targets also use
+# static runtime. Using CMAKE_MSVC_RUNTIME_LIBRARY is the modern CMake way
+# (3.15+) and is more reliable than string replacement.
+# Static runtime means the plugin won't need VC++ Redistributable installed
+# on the user's machine - everything needed is bundled into the .exe/.dll
+if (MSVC)
+    # Set static runtime library for all targets created after this point
+    # MultiThreaded = /MT (Release), MultiThreadedDebug = /MTd (Debug)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+    message(STATUS "MSVC: Using static runtime library (/MT) for all targets")
+endif()
+
 # Adding a directory with the library/application name as a subfolder of the
 # include folder is a good practice. It helps avoid name clashes later on.
 # =====================================================================
@@ -25,31 +39,12 @@ juce_add_plugin( ${PROJECT_NAME}
     COPY_PLUGIN_AFTER_BUILD TRUE
 )
 
-# Force the use of the static runtime (/MT or /MTd) for MSVC
+# Explicitly set runtime library for the plugin target (belt and suspenders approach)
 # =====================================================================
-# This ensures that all parts of the project, including JUCE modules,
-# use the static runtime instead of the dynamic runtime.
+# This ensures the plugin target definitely uses static runtime, even if
+# something tries to override it later
 if (MSVC)
-    # Replace all occurrences of /MD (dynamic runtime) with /MT (static runtime)
-    # in the global CMake flags. These flags control how the compiler and linker
-    # treat runtime libraries across different build configurations.
-    foreach (flag_var
-        CMAKE_C_FLAGS                   # Flags for C compilation
-        CMAKE_C_FLAGS_DEBUG             # Flags for Debug configuration
-        CMAKE_C_FLAGS_RELEASE           # Flags for Release configuration
-        CMAKE_C_FLAGS_MINSIZEREL        # Flags for MinSizeRel configuration
-        CMAKE_C_FLAGS_RELWITHDEBINFO    # Flags for RelWithDebInfo configuration
-        CMAKE_CXX_FLAGS                 # Flags for C++ compilation
-        CMAKE_CXX_FLAGS_DEBUG           # Flags for Debug configuration
-        CMAKE_CXX_FLAGS_RELEASE         # Flags for Release configuration
-        CMAKE_CXX_FLAGS_MINSIZEREL      # Flags for MinSizeRel configuration
-        CMAKE_CXX_FLAGS_RELWITHDEBINFO  # Flags for RelWithDebInfo configuration
-    )
-        # Replace dynamic runtime (/MD) with static runtime (/MT) for Release builds
-        string(REPLACE "/MD" "/MT" ${flag_var} "${${flag_var}}")
-        # Replace dynamic runtime with debugging symbols (/MDd) with static runtime with debug symbols (/MTd)
-        string(REPLACE "/MDd" "/MTd" ${flag_var} "${${flag_var}}")
-    endforeach()
+    set_property(TARGET ${PROJECT_NAME} PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
 
 # Pre-Processor Directive for Demo vs. Full Version
@@ -81,7 +76,6 @@ endif()
 include(${CMAKE_CURRENT_SOURCE_DIR}/sourceListResult.cmake)
 
 
-
 # Console out the value of PLUGIN_SOURCES
 # =====================================================================
 message(STATUS "Source files for ${PROJECT_NAME}: ${PLUGIN_SOURCES}")
@@ -106,10 +100,10 @@ target_include_directories(${PROJECT_NAME}
 message(STATUS "Plugin: CMakeLists.txt - target_link_libraries")
 target_link_libraries(${PROJECT_NAME}
     PRIVATE
-	    ${PROJECT_NAME}BinaryData
+        ${PROJECT_NAME}BinaryData
         juce::juce_audio_utils
-	    juce::juce_dsp
-        WizardCore::AudioModules
+        juce::juce_dsp
+        WizardCore::AudioModules   # Shared DSP library — Chorus, LFO, DelayLine, etc.
     PUBLIC
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags
@@ -148,43 +142,27 @@ source_group("JUCE Modules" FILES ${ALL_JUCE_FILES})
 
 # Define and create source groups for WizardCore files
 # =====================================================================
-# This programmatically organizes all WizardCore module files into a clean folder structure
-# in Visual Studio, regardless of how many modules exist or are added in the future
-
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../libs/wizardcore/plugin/source")
-    # Get all WizardCore source files (.cpp, .h)
-    file(GLOB_RECURSE WIZARDCORE_CPP_FILES 
+    file(GLOB_RECURSE WIZARDCORE_CPP_FILES
         "${CMAKE_CURRENT_SOURCE_DIR}/../libs/wizardcore/plugin/source/*.cpp"
     )
-    file(GLOB_RECURSE WIZARDCORE_H_FILES 
+    file(GLOB_RECURSE WIZARDCORE_H_FILES
         "${CMAKE_CURRENT_SOURCE_DIR}/../libs/wizardcore/plugin/source/*.h"
     )
-    
-    # Combine all WizardCore files
     set(ALL_WIZARDCORE_FILES ${WIZARDCORE_CPP_FILES} ${WIZARDCORE_H_FILES})
-    
-    # Create organized source groups for each WizardCore module
     foreach(WIZARDCORE_FILE ${ALL_WIZARDCORE_FILES})
-        # Get the relative path from the WizardCore source directory
-        file(RELATIVE_PATH REL_PATH 
-            "${CMAKE_CURRENT_SOURCE_DIR}/../libs/wizardcore/plugin/source" 
+        file(RELATIVE_PATH REL_PATH
+            "${CMAKE_CURRENT_SOURCE_DIR}/../libs/wizardcore/plugin/source"
             "${WIZARDCORE_FILE}"
         )
-        
-        # Extract the directory part (e.g., "Chorus", "LFO", "DelayLine/BBDelayLine")
         get_filename_component(FILE_DIR "${REL_PATH}" DIRECTORY)
-        
-        # Create the source group path
         if(FILE_DIR STREQUAL "")
-            # Files in root source directory
             source_group("WizardCore" FILES "${WIZARDCORE_FILE}")
         else()
-            # Files in subdirectories - create nested groups
             string(REPLACE "/" "\\" GROUP_PATH "${FILE_DIR}")
             source_group("WizardCore\\${GROUP_PATH}" FILES "${WIZARDCORE_FILE}")
         endif()
     endforeach()
-    
     list(LENGTH ALL_WIZARDCORE_FILES WIZARDCORE_FILE_COUNT)
     message(STATUS "Organized ${WIZARDCORE_FILE_COUNT} WizardCore files into Visual Studio source groups")
 endif()
