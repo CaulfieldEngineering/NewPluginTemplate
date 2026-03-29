@@ -35,6 +35,9 @@ namespace audio_plugin {
     void getStateInformation(juce::MemoryBlock &destData) override;
     void setStateInformation(const void *data, int sizeInBytes) override;
 
+    // Required by Wonderlab web build framework
+    void setDemoState(bool) {}
+
     private:
     // ============================================================================
     // PARAMETER TREE

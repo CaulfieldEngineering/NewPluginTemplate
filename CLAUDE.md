@@ -76,6 +76,10 @@ The GitHub Actions workflow builds on both Mac and Windows automatically on push
 
 Plugin source files are auto-discovered by `plugin/createSourceList.py`, which generates `plugin/sourceListResult.cmake`. You do not need to manually register new `.cpp` files in CMake — just add them to `plugin/source/` and they will be picked up on the next CMake configure.
 
+## Wonderlab web build requirement
+
+The Wonderlab framework's `MainTemplate.cpp` calls `processor->setDemoState(false)` on every plugin. The processor class must have a `void setDemoState(bool) {}` method (can be a no-op stub) or the web build will fail.
+
 ## Repo name vs plugin name
 
 The GitHub repository name and `wPLUGIN_NAME` in `config.cmake` can differ (e.g., repo=`concept-fattener`, plugin=`Fattener`). JUCE generates all build artifacts under `wPLUGIN_NAME`. The CI/CD workflow uses `wPLUGIN_NAME` for artifact paths, package names, installer filenames, and web build outputs. It uses the repository name only for server deploy directory paths and URL slugs.
