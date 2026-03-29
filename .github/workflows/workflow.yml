@@ -1128,11 +1128,11 @@ jobs:
         # Set file paths and titles based on OS
         if [ "${{ matrix.os }}" == "macos-latest" ]; then
           FILE_PATH="${GITHUB_WORKSPACE}/build/${REPO_NAME}MacInstaller_${wPROJECT_VERSION}.pkg"
-          FILE_TITLE="Tertiary Installer v${wPROJECT_VERSION} for Mac"
+          FILE_TITLE="${wPLUGIN_NAME} Installer v${wPROJECT_VERSION} for Mac"
           FILE_NAME="${REPO_NAME}MacInstaller_${wPROJECT_VERSION}.pkg"
         elif [ "${{ matrix.os }}" == "windows-latest" ]; then
           FILE_PATH="${GITHUB_WORKSPACE}/build/${REPO_NAME}WinInstaller_${wPROJECT_VERSION}.exe"
-          FILE_TITLE="Tertiary Installer v${wPROJECT_VERSION} for Windows"
+          FILE_TITLE="${wPLUGIN_NAME} Installer v${wPROJECT_VERSION} for Windows"
           FILE_NAME="${REPO_NAME}WinInstaller_${wPROJECT_VERSION}.exe"
         else
           echo "Unsupported OS for WordPress upload"
@@ -1424,6 +1424,10 @@ jobs:
         
         echo "Generated build configuration:"
         cat web/web-template/src/config/buildConfig.json
+
+        # Patch homepage in package.json to use this repo's name
+        sed -i "s|REPO_NAME_PLACEHOLDER|${REPO_NAME}|g" web/web-template/package.json
+        echo "Patched package.json homepage to: /plug-ins/${REPO_NAME}"
       shell: bash
 
 
