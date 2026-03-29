@@ -1025,19 +1025,14 @@ jobs:
     # ==========================================================================================
     - name: Upload Installer to Server (SCP)
       if: steps.check_ssh.outputs.ssh_available == 'true'
-      env:
-        REPOSITORY_NAME: ${{ github.event.repository.name }}
       shell: bash
       run: |
         set -e  # Exit immediately if any command exits with a non-zero status
 
         echo "SSH credentials available. Starting installer upload..."
 
-        REPO_NAME=$(echo $GITHUB_REPOSITORY | awk -F / '{print $2}')
-        echo "REPO_NAME set to: $REPO_NAME"
-
         # Set destination path (installers subfolder)
-        DEST_PATH="/home/caulfiel/public_html/plug-ins/${REPO_NAME}/installers/"
+        DEST_PATH="/home/caulfiel/public_html/plug-ins/${wPLUGIN_NAME}/installers/"
         SERVER="CaulfieldEngineering.com"
 
         echo "Checking if destination directory exists on the server..."
@@ -1080,7 +1075,7 @@ jobs:
           exit 1
         fi
 
-        echo "Installer deployed to: https://caulfieldengineering.com/plug-ins/${REPO_NAME}/${INSTALLER_NAME}"
+        echo "Installer deployed to: https://caulfieldengineering.com/plug-ins/${wPLUGIN_NAME}/${INSTALLER_NAME}"
 
 
 
@@ -1384,8 +1379,6 @@ jobs:
     # ==========================================================================================
     - name: Deploy Web App to CaulfieldEngineering.com
       if: steps.check_ssh_web.outputs.ssh_available == 'true'
-      env:
-        REPOSITORY_NAME: ${{ github.event.repository.name }}
       shell: bash
       run: |
         set -e
@@ -1394,7 +1387,7 @@ jobs:
         WONDERLAB_DIR="${GITHUB_WORKSPACE}/Wonderlab"
 
         CE_SERVER="CaulfieldEngineering.com"
-        CE_DEST="/home/caulfiel/public_html/plug-ins/${REPOSITORY_NAME}/web/"
+        CE_DEST="/home/caulfiel/public_html/plug-ins/${wPLUGIN_NAME}/web/"
 
         echo "Deploying web app to ${CE_SERVER}:${CE_DEST}..."
 
@@ -1417,7 +1410,7 @@ jobs:
         echo ""
         echo "==========================================================================="
         echo "  CaulfieldEngineering.com deployed"
-        echo "  URL: https://caulfieldengineering.com/plug-ins/${REPOSITORY_NAME}/web/"
+        echo "  URL: https://caulfieldengineering.com/plug-ins/${wPLUGIN_NAME}/web/"
         echo "==========================================================================="
 
 
@@ -1425,8 +1418,6 @@ jobs:
     # ==========================================================================================
     - name: Deploy Web App to WonderlandAudio.com
       if: steps.check_ssh_web.outputs.ssh_available == 'true' && startsWith(github.ref, 'refs/tags/v')
-      env:
-        REPOSITORY_NAME: ${{ github.event.repository.name }}
       shell: bash
       run: |
         set -e
@@ -1438,7 +1429,7 @@ jobs:
 
         WP_HOST="sftp.wp.com"
         WP_USER="wonderlandaudio.wordpress.com"
-        WP_DEST="/srv/htdocs/demo/${REPOSITORY_NAME}"
+        WP_DEST="/srv/htdocs/demo/${wPLUGIN_NAME}"
 
         # Install sshpass for non-interactive SFTP password auth
         sudo apt-get install -y -q sshpass > /dev/null 2>&1
@@ -1464,5 +1455,5 @@ jobs:
         echo ""
         echo "==========================================================================="
         echo "  WonderlandAudio.com deployed (production)"
-        echo "  URL: https://wonderlandaudio.com/demo/${REPOSITORY_NAME}/"
+        echo "  URL: https://wonderlandaudio.com/demo/${wPLUGIN_NAME}/"
         echo "==========================================================================="
