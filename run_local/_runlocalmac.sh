@@ -280,7 +280,7 @@ TRACK_LIST=""
 if [ -d "${SAMPLE_DIR}" ]; then
     echo "         Copying sample audio tracks..."
     mkdir -p "${WEB_BUILD_DIR}/audio"
-    for f in "${SAMPLE_DIR}"/*; do
+    for f in "${SAMPLE_DIR}"/*.wav "${SAMPLE_DIR}"/*.mp3 "${SAMPLE_DIR}"/*.ogg "${SAMPLE_DIR}"/*.flac; do
         [ -f "$f" ] || continue
         cp "$f" "${WEB_BUILD_DIR}/audio/"
         fname=$(basename "$f")

@@ -325,7 +325,7 @@ set "TRACK_LIST="
 if exist "!SAMPLE_DIR!" (
     echo         Copying sample audio tracks...
     mkdir "%WEB_BUILD_DIR%\audio" 2>nul
-    for %%f in ("!SAMPLE_DIR!\*.*") do (
+    for %%f in ("!SAMPLE_DIR!\*.wav" "!SAMPLE_DIR!\*.mp3" "!SAMPLE_DIR!\*.ogg" "!SAMPLE_DIR!\*.flac") do (
         copy "%%f" "%WEB_BUILD_DIR%\audio\" >nul
         if defined TRACK_LIST (
             set "TRACK_LIST=!TRACK_LIST!, { title: '%%~nf', file: 'audio/%%~nxf' }"
