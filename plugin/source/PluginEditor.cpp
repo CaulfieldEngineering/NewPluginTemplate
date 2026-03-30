@@ -6,9 +6,10 @@ namespace audio_plugin {
         AudioPluginAudioProcessor &p)
         : AudioProcessorEditor(&p), processorRef(p) {
     juce::ignoreUnused(processorRef);
-    // Make sure that before the constructor has finished, you've set the
-    // editor's size to whatever you need it to be.
-    setSize(400, 300);
+    // Editor size must be at least 750x515 for Wonderlab web builds.
+    // The web container defaults to 750x515, and the canvas detection
+    // requires width >= 700. Smaller sizes will render incorrectly.
+    setSize(750, 515);
     }
 
     AudioPluginAudioProcessorEditor::~AudioPluginAudioProcessorEditor() {}
