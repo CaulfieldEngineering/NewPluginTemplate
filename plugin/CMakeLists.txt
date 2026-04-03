@@ -39,6 +39,40 @@ juce_add_plugin( ${PROJECT_NAME}
     COPY_PLUGIN_AFTER_BUILD TRUE
 )
 
+# DAW Launch Targets
+# =====================================================================
+# These create lightweight targets in the VS solution that build the VST3
+# and then launch a DAW. Set one as the Startup Project and hit F5.
+# To add a new DAW, just add another entry to the list below.
+# =====================================================================
+if (MSVC)
+    file(WRITE "${CMAKE_BINARY_DIR}/launcher_stub.cpp" "int main() { return 0; }\n")
+
+    set(DAW_TARGETS
+        "Launch_Reaper|C:/Program Files/REAPER (x64)/reaper.exe"
+        "Launch_Cubase|C:/Program Files/Steinberg/Cubase 12/Cubase12.exe"
+        "Launch_Cantabile|C:/Program Files/Topten Software/Cantabile 4.0/Cantabile.exe"
+    )
+
+    foreach(DAW_ENTRY ${DAW_TARGETS})
+        string(REPLACE "|" ";" DAW_PARTS "${DAW_ENTRY}")
+        list(GET DAW_PARTS 0 DAW_NAME)
+        list(GET DAW_PARTS 1 DAW_EXE)
+
+        if (EXISTS "${DAW_EXE}")
+            add_executable(${DAW_NAME} "${CMAKE_BINARY_DIR}/launcher_stub.cpp")
+            add_dependencies(${DAW_NAME} ${PROJECT_NAME}_VST3)
+            set_target_properties(${DAW_NAME} PROPERTIES
+                VS_DEBUGGER_COMMAND "${DAW_EXE}"
+                FOLDER "Launch Targets"
+            )
+            message(STATUS "Launch target: ${DAW_NAME} -> ${DAW_EXE}")
+        else()
+            message(STATUS "Launch target: ${DAW_NAME} -> SKIPPED (not found: ${DAW_EXE})")
+        endif()
+    endforeach()
+endif()
+
 # Explicitly set runtime library for the plugin target (belt and suspenders approach)
 # =====================================================================
 # This ensures the plugin target definitely uses static runtime, even if
@@ -142,19 +176,20 @@ source_group("JUCE Modules" FILES ${ALL_JUCE_FILES})
 
 # Define and create source groups for WizardCore files
 # =====================================================================
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../libs/wizardcore/plugin/source")
-    file(GLOB_RECURSE WIZARDCORE_CPP_FILES
-        "${CMAKE_CURRENT_SOURCE_DIR}/../libs/wizardcore/plugin/source/*.cpp"
+# WizardCore_SOURCE_DIR is set by CPM — it resolves to either:
+#   - The local repo path (when CPM_WizardCore_SOURCE env var is set)
+#   - The cached clone in libs/wizardcore/ (when cloned from GitHub)
+# We use this variable so the source groups work regardless of which
+# mode CPM is operating in.
+# =====================================================================
+set(WIZARDCORE_SRC_ROOT "${WizardCore_SOURCE_DIR}/plugin/source")
+if(EXISTS "${WIZARDCORE_SRC_ROOT}")
+    file(GLOB_RECURSE ALL_WIZARDCORE_FILES
+        "${WIZARDCORE_SRC_ROOT}/*.cpp"
+        "${WIZARDCORE_SRC_ROOT}/*.h"
     )
-    file(GLOB_RECURSE WIZARDCORE_H_FILES
-        "${CMAKE_CURRENT_SOURCE_DIR}/../libs/wizardcore/plugin/source/*.h"
-    )
-    set(ALL_WIZARDCORE_FILES ${WIZARDCORE_CPP_FILES} ${WIZARDCORE_H_FILES})
     foreach(WIZARDCORE_FILE ${ALL_WIZARDCORE_FILES})
-        file(RELATIVE_PATH REL_PATH
-            "${CMAKE_CURRENT_SOURCE_DIR}/../libs/wizardcore/plugin/source"
-            "${WIZARDCORE_FILE}"
-        )
+        file(RELATIVE_PATH REL_PATH "${WIZARDCORE_SRC_ROOT}" "${WIZARDCORE_FILE}")
         get_filename_component(FILE_DIR "${REL_PATH}" DIRECTORY)
         if(FILE_DIR STREQUAL "")
             source_group("WizardCore" FILES "${WIZARDCORE_FILE}")
@@ -163,6 +198,11 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../libs/wizardcore/plugin/source")
             source_group("WizardCore\\${GROUP_PATH}" FILES "${WIZARDCORE_FILE}")
         endif()
     endforeach()
+    # Add WizardCore files to the target so Visual Studio shows .h files
+    # as siblings alongside .cpp files (not hidden under dependency arrows).
+    # Without this, VS only discovers headers via #include and nests them.
+    target_sources(${PROJECT_NAME} PRIVATE ${ALL_WIZARDCORE_FILES})
+
     list(LENGTH ALL_WIZARDCORE_FILES WIZARDCORE_FILE_COUNT)
     message(STATUS "Organized ${WIZARDCORE_FILE_COUNT} WizardCore files into Visual Studio source groups")
 endif()

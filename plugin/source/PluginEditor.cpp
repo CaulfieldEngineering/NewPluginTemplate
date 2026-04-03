@@ -2,21 +2,28 @@
 #include "PluginProcessor.h"
 
 namespace audio_plugin {
+
+    // Constructor
+    // ==============================================================================
+
     AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor(
         AudioPluginAudioProcessor &p)
         : AudioProcessorEditor(&p), processorRef(p) {
     juce::ignoreUnused(processorRef);
+
     // Editor size must be at least 750x515 for Wonderlab web builds.
-    // The web container defaults to 750x515, and the canvas detection
-    // requires width >= 700. Smaller sizes will render incorrectly.
     setSize(750, 515);
     }
 
+    // Destructor
+    // ==============================================================================
+
     AudioPluginAudioProcessorEditor::~AudioPluginAudioProcessorEditor() {}
 
+    // paint
+    // ==============================================================================
+
     void AudioPluginAudioProcessorEditor::paint(juce::Graphics &g) {
-    // (Our component is opaque, so we must completely fill the background with a
-    // solid colour)
     g.fillAll(juce::Colours::grey);
 
     g.setColour(juce::Colours::white);
@@ -29,12 +36,12 @@ namespace audio_plugin {
        g.drawFittedText("Hello World!", getLocalBounds(),
                         juce::Justification::centred, 1);
     #endif
-
-
     }
+
+    // resized
+    // ==============================================================================
 
     void AudioPluginAudioProcessorEditor::resized() {
-    // This is generally where you'll want to lay out the positions of any
-    // subcomponents in your editor..
     }
+
 } // namespace audio_plugin

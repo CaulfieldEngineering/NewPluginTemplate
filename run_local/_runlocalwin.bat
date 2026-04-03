@@ -209,6 +209,15 @@ set "PLUGIN_SRC_DIR=%cd%\plugin\source"
 set "WEB_BUILD_DIR=%cd%\build\web"
 set "BINARY_DATA_DIR=%cd%\build\plugin\images\juce_binarydata_!REPOSITORY_NAME!BinaryData\JuceLibraryCode"
 
+:: -- WizardCore source path (local override or cached clone) --
+if defined CPM_WizardCore_SOURCE (
+    set "WIZARDCORE_SRC_DIR=!CPM_WizardCore_SOURCE!\plugin\source"
+) else if exist "%cd%\libs\wizardcore\plugin\source" (
+    set "WIZARDCORE_SRC_DIR=%cd%\libs\wizardcore\plugin\source"
+) else (
+    set "WIZARDCORE_SRC_DIR="
+)
+
 :: -- Find Emscripten SDK --
 if defined EMSDK (
     set "EMSDK_DIR=!EMSDK!"
@@ -255,6 +264,11 @@ if not defined NODE_EXE (
 set "PLUGIN_SRC_FWD=!PLUGIN_SRC_DIR:\=/!"
 set "WONDERLAB_FWD=!WONDERLAB_DIR:\=/!"
 set "BINARY_DATA_FWD=!BINARY_DATA_DIR:\=/!"
+if defined WIZARDCORE_SRC_DIR (
+    set "WIZARDCORE_SRC_FWD=!WIZARDCORE_SRC_DIR:\=/!"
+) else (
+    set "WIZARDCORE_SRC_FWD="
+)
 
 :: -- Create build directory --
 mkdir "%WEB_BUILD_DIR%" 2>nul
@@ -274,8 +288,8 @@ echo set(PLUGIN_SRC_DIR "%PLUGIN_SRC_FWD%"^)
 echo set(WONDERLAB_DIR "%WONDERLAB_FWD%"^)
 echo set(PLUGIN_PROCESSOR_HEADER "PluginProcessor.h"^)
 echo set(PLUGIN_PROCESSOR_CLASS audio_plugin::AudioPluginAudioProcessor^)
-echo set(PLUGIN_EXTRA_INCLUDE_DIRS "%BINARY_DATA_FWD%"^)
-echo set(PLUGIN_EXTRA_SOURCE_DIRS "%BINARY_DATA_FWD%"^)
+echo set(PLUGIN_EXTRA_INCLUDE_DIRS "%BINARY_DATA_FWD%;!WIZARDCORE_SRC_FWD!"^)
+echo set(PLUGIN_EXTRA_SOURCE_DIRS "%BINARY_DATA_FWD%;!WIZARDCORE_SRC_FWD!"^)
 echo.
 echo include(%WONDERLAB_FWD%/cmake/WonderlabBuild.cmake^)
 ) > CMakeLists.txt
@@ -325,7 +339,7 @@ set "TRACK_LIST="
 if exist "!SAMPLE_DIR!" (
     echo         Copying sample audio tracks...
     mkdir "%WEB_BUILD_DIR%\audio" 2>nul
-    for %%f in ("!SAMPLE_DIR!\*.wav" "!SAMPLE_DIR!\*.mp3" "!SAMPLE_DIR!\*.ogg" "!SAMPLE_DIR!\*.flac") do (
+    for %%f in ("!SAMPLE_DIR!\*.*") do (
         copy "%%f" "%WEB_BUILD_DIR%\audio\" >nul
         if defined TRACK_LIST (
             set "TRACK_LIST=!TRACK_LIST!, { title: '%%~nf', file: 'audio/%%~nxf' }"

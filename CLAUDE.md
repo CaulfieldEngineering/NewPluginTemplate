@@ -59,6 +59,26 @@ WizardCore (shared DSP library) is pulled in automatically via CPM in `CMakeList
 
 The include root is the WizardCore `plugin/source/` directory. Include paths are `Module/Module.h`, not `WizardCore/Module/Module.h`. No CMake changes needed to access existing WizardCore modules.
 
+### Local development vs CI/production
+
+CPM supports a **source override** via the `CPM_WizardCore_SOURCE` environment variable:
+
+| Scenario | `CPM_WizardCore_SOURCE` | WizardCore source | Commit required? |
+|----------|------------------------|-------------------|-----------------|
+| **Local dev** | Set to your local WizardCore path | Files on disk — uncommitted edits compile immediately | No |
+| **CI / production** | Not set | Cloned from GitHub at `GIT_TAG` | Yes |
+| **Ship time** | Not set | Cloned from GitHub at a pinned version tag | Yes |
+
+**Set this once on your dev machine** (System Properties → Environment Variables):
+
+```
+CPM_WizardCore_SOURCE = C:\Users\jpcfo\Documents\_GitHub\_CaulfieldEngineering\WizardCore
+```
+
+Then re-run CMake configure. All plugins will build against your single local WizardCore — one source of truth, no duplicate clones. Edit WizardCore, Ctrl+B in the plugin's VS solution, changes compile instantly.
+
+When ready to push: commit & push WizardCore first, then the plugin. CI runners don't have the env var, so they clone from GitHub automatically.
+
 ## Local builds
 
 - **Windows**: `run_local/_runlocalwin.bat` — interactive, prompts for demo/full and web build options

@@ -35,11 +35,10 @@ cd /d "%~dp0"
 cd ..\..
 
 :: ==========================================================================
-:: DEPLOYMENT CONFIGURATION
-:: TODO: Update these values for the target WordPress host before using.
+:: DEPLOYMENT CONFIGURATION — WonderlandAudio.com (WordPress)
 :: ==========================================================================
-set "SSH_KEY=%USERPROFILE%\.ssh\id_wp"
-set "SFTP_HOST=yoursite@sftp.wp.com"
+set "SSH_KEY=C:\Users\jpcfo\.ssh\id_wp"
+set "SFTP_HOST=wonderlandaudio.wordpress.com@sftp.wp.com"
 set "WP_DEST=/srv/htdocs/demo/"
 
 :: ==========================================================================
@@ -120,6 +119,15 @@ if not exist "!WONDERLAB!\cmake\WonderlabBuild.cmake" (
     exit /b 1
 )
 
+:: -- WizardCore source path (local override or cached clone) --
+if defined CPM_WizardCore_SOURCE (
+    set "WIZARDCORE_SRC_DIR=!CPM_WizardCore_SOURCE!\plugin\source"
+) else if exist "%cd%\libs\wizardcore\plugin\source" (
+    set "WIZARDCORE_SRC_DIR=%cd%\libs\wizardcore\plugin\source"
+) else (
+    set "WIZARDCORE_SRC_DIR="
+)
+
 :: -- Find BinaryData --
 set "BINARY_DATA_DIR=%cd%\build\plugin\images\juce_binarydata_!REPO!BinaryData\JuceLibraryCode"
 if not exist "!BINARY_DATA_DIR!\BinaryData.h" (
@@ -139,6 +147,11 @@ if not exist "!WEB_BUILD_DIR!" mkdir "!WEB_BUILD_DIR!"
 set "PLUGIN_SRC_FWD=!PLUGIN_SRC:\=/!"
 set "WONDERLAB_FWD=!WONDERLAB:\=/!"
 set "BINARY_DATA_FWD=!BINARY_DATA_DIR:\=/!"
+if defined WIZARDCORE_SRC_DIR (
+    set "WIZARDCORE_SRC_FWD=!WIZARDCORE_SRC_DIR:\=/!"
+) else (
+    set "WIZARDCORE_SRC_FWD="
+)
 
 :: -- Generate CMakeLists.txt --
 echo         Generating CMakeLists.txt...
@@ -154,8 +167,8 @@ echo set(PLUGIN_SRC_DIR "!PLUGIN_SRC_FWD!"^)
 echo set(WONDERLAB_DIR "!WONDERLAB_FWD!"^)
 echo set(PLUGIN_PROCESSOR_HEADER "PluginProcessor.h"^)
 echo set(PLUGIN_PROCESSOR_CLASS audio_plugin::AudioPluginAudioProcessor^)
-echo set(PLUGIN_EXTRA_INCLUDE_DIRS "!BINARY_DATA_FWD!"^)
-echo set(PLUGIN_EXTRA_SOURCE_DIRS "!BINARY_DATA_FWD!"^)
+echo set(PLUGIN_EXTRA_INCLUDE_DIRS "!BINARY_DATA_FWD!;!WIZARDCORE_SRC_FWD!"^)
+echo set(PLUGIN_EXTRA_SOURCE_DIRS "!BINARY_DATA_FWD!;!WIZARDCORE_SRC_FWD!"^)
 echo.
 echo include(!WONDERLAB_FWD!/cmake/WonderlabBuild.cmake^)
 ) > "!WEB_BUILD_DIR!\CMakeLists.txt"
@@ -177,7 +190,7 @@ if %errorlevel% neq 0 (
     pause
     exit /b 1
 )
-cd "%~dp0\..\.."
+cd "%~dp0\.."
 
 :: -- Copy web assets --
 echo         Copying web assets...
@@ -228,8 +241,6 @@ echo put "!WEB_BUILD_DIR!\index.html"
 echo put "!WEB_BUILD_DIR!\plugin-config.js"
 echo put "!WEB_BUILD_DIR!\!REPO!Web.js"
 echo put "!WEB_BUILD_DIR!\!REPO!Web.wasm"
-echo put "!WEB_BUILD_DIR!\!REPO!WebFallback.js"
-echo put "!WEB_BUILD_DIR!\!REPO!WebFallback.wasm"
 ) > "!CMDS!"
 
 REM Include PHP files only if they were copied (optional, WordPress-specific)

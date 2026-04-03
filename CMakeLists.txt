@@ -112,15 +112,27 @@ CPMAddPackage(
     SOURCE_DIR ${LIB_DIR}/juce
 )
 
-# This downloads the WizardCore shared DSP/utility library.
-# WizardCore provides reusable audio modules (Chorus, LFO, DelayLine, etc.)
+# WizardCore — Shared DSP/utility library
+# Provides reusable audio modules (Chorus, LFO, DelayLine, etc.)
 # under the WizardCore:: CMake namespace. See plugin/CMakeLists.txt for usage.
+#
+# LOCAL DEVELOPMENT vs CI/PRODUCTION:
+#   If the environment variable CPM_WizardCore_SOURCE is set, CPM will use
+#   that local directory as-is — no clone, no checkout, no commit required.
+#   This is the recommended workflow for development: edit WizardCore locally,
+#   hit Ctrl+B in Visual Studio, and changes compile immediately.
+#
+#   When CPM_WizardCore_SOURCE is NOT set (e.g., on a CI runner), CPM falls
+#   back to cloning from GitHub at the specified GIT_TAG.
+#
+#   Development:  set CPM_WizardCore_SOURCE=C:\path\to\WizardCore
+#   Production:   leave unset — CI clones from GitHub
+#   Ship time:    pin GIT_TAG to a specific version tag (e.g., v1.0.0)
 # =====================================================================
 CPMAddPackage(
     NAME WizardCore
     GIT_TAG staging  # ← Tracks latest WizardCore. Pin to a version tag at ship time.
     GITHUB_REPOSITORY CaulfieldEngineering/WizardCore
-    SOURCE_DIR ${LIB_DIR}/wizardcore
 )
 
 # Adds googletest.

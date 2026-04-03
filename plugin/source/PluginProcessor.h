@@ -3,68 +3,86 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 
 namespace audio_plugin {
+
     class AudioPluginAudioProcessor : public juce::AudioProcessor {
+
     public:
-    AudioPluginAudioProcessor();
-    ~AudioPluginAudioProcessor() override;
 
-    void prepareToPlay(double sampleRate, int samplesPerBlock) override;
-    void releaseResources() override;
+        AudioPluginAudioProcessor();
+        ~AudioPluginAudioProcessor() override;
 
-    bool isBusesLayoutSupported(const BusesLayout &layouts) const override;
+        // Audio Lifecycle
+        // ==============================================================================
 
-    void processBlock(juce::AudioBuffer<float> &, juce::MidiBuffer &) override;
-    using AudioProcessor::processBlock;
+        void prepareToPlay(double sampleRate, int samplesPerBlock) override;
+        void releaseResources() override;
+        bool isBusesLayoutSupported(const BusesLayout &layouts) const override;
+        void processBlock(juce::AudioBuffer<float> &, juce::MidiBuffer &) override;
+        using AudioProcessor::processBlock;
 
-    juce::AudioProcessorEditor *createEditor() override;
-    bool hasEditor() const override;
+        // UI
+        // ==============================================================================
 
-    const juce::String getName() const override;
+        juce::AudioProcessorEditor *createEditor() override;
+        bool hasEditor() const override;
 
-    bool acceptsMidi() const override;
-    bool producesMidi() const override;
-    bool isMidiEffect() const override;
-    double getTailLengthSeconds() const override;
+        // Host Info
+        // ==============================================================================
 
-    int getNumPrograms() override;
-    int getCurrentProgram() override;
-    void setCurrentProgram(int index) override;
-    const juce::String getProgramName(int index) override;
-    void changeProgramName(int index, const juce::String &newName) override;
+        const juce::String getName() const override;
+        bool acceptsMidi() const override;
+        bool producesMidi() const override;
+        bool isMidiEffect() const override;
+        double getTailLengthSeconds() const override;
 
-    void getStateInformation(juce::MemoryBlock &destData) override;
-    void setStateInformation(const void *data, int sizeInBytes) override;
+        // Programs
+        // ==============================================================================
 
-    // ============================================================================
-    // DEMO / ACTIVATION
-    // ============================================================================
-    bool getDemoState() const { return mIsDemoVersion; }
-    void setDemoState(bool demoState);
-    bool isEffectEnabled() const { return mEffectEnabled; }
+        int getNumPrograms() override;
+        int getCurrentProgram() override;
+        void setCurrentProgram(int index) override;
+        const juce::String getProgramName(int index) override;
+        void changeProgramName(int index, const juce::String &newName) override;
+
+        // State
+        // ==============================================================================
+
+        void getStateInformation(juce::MemoryBlock &destData) override;
+        void setStateInformation(const void *data, int sizeInBytes) override;
+
+        // Demo / Activation
+        // ==============================================================================
+
+        bool getDemoState() const { return mIsDemoVersion; }
+        void setDemoState(bool demoState);
+        bool isEffectEnabled() const { return mEffectEnabled; }
 
     private:
-    // ============================================================================
-    // PARAMETER TREE
-    // ============================================================================
-    juce::AudioProcessorValueTreeState mParameterTree;
-    juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
-    // ============================================================================
-    // PARAMETER ACCESS
-    // ============================================================================
-    juce::AudioProcessorValueTreeState& getParameterTree() { return mParameterTree; }
+        // Parameter Tree
+        // ==============================================================================
 
-    // ============================================================================
-    // DEMO STATE
-    // ============================================================================
-    bool mIsDemoVersion { true };
-    bool mEffectEnabled { true };
-    int mDemoActiveSeconds { 50 };
-    int mDemoBypassSeconds { 10 };
-    int64_t mSampleCounter { 0 };
-    int64_t mSamplesUntilDisable { 0 };
-    int64_t mSamplesUntilEnable { 0 };
+        juce::AudioProcessorValueTreeState mParameterTree;
+        juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
+        juce::AudioProcessorValueTreeState& getParameterTree() { return mParameterTree; }
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AudioPluginAudioProcessor)
+        // Demo State
+        // ==============================================================================
+
+        bool mIsDemoVersion { true };
+        bool mEffectEnabled { true };
+        int mDemoActiveSeconds { 50 };
+        int mDemoBypassSeconds { 10 };
+        int64_t mSampleCounter { 0 };
+        int64_t mSamplesUntilDisable { 0 };
+        int64_t mSamplesUntilEnable { 0 };
+
+        // DSP
+        // ==============================================================================
+
+        // TODO: Add your DSP members here
+
+        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AudioPluginAudioProcessor)
     };
+
 } // namespace audio_plugin

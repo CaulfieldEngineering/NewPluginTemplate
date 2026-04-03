@@ -37,13 +37,11 @@ echo  =========================================================================
 echo.
 
 :: ==========================================================================
-:: DEPLOYMENT CONFIGURATION
-:: TODO: Update these values for the target server before using.
+:: DEPLOYMENT CONFIGURATION — CaulfieldEngineering.com
 :: ==========================================================================
-set "SSH_KEY=%USERPROFILE%\.ssh\id_rsa"
-set "SERVER=user@yourdomain.com"
-set "SERVER_PORT=22"
-set "DEST=/path/to/web/root/"
+set "SSH_KEY=C:\Users\jpcfo\.ssh\id_rsa"
+set "SERVER=caulfiel@CaulfieldEngineering.com"
+set "SERVER_PORT=7822"
 
 :: ==========================================================================
 :: STEP 1: Read config.cmake
@@ -64,6 +62,7 @@ for /f "usebackq tokens=*" %%L in (`findstr "set(w" config.cmake`) do (
 )
 
 set "REPOSITORY_NAME=!wPLUGIN_NAME!"
+set "DEST=/home/caulfiel/public_html/plug-ins/!REPOSITORY_NAME!/web/"
 set "VERSION=!wPROJECT_VERSION!"
 echo         Plugin: !REPOSITORY_NAME! v!VERSION!
 echo.
@@ -102,6 +101,15 @@ set "WONDERLAB_DIR=%cd%\..\Wonderlab"
 set "PLUGIN_SRC_DIR=%cd%\plugin\source"
 set "WEB_BUILD_DIR=%cd%\build\web"
 
+:: -- WizardCore source path (local override or cached clone) --
+if defined CPM_WizardCore_SOURCE (
+    set "WIZARDCORE_SRC_DIR=!CPM_WizardCore_SOURCE!\plugin\source"
+) else if exist "%cd%\libs\wizardcore\plugin\source" (
+    set "WIZARDCORE_SRC_DIR=%cd%\libs\wizardcore\plugin\source"
+) else (
+    set "WIZARDCORE_SRC_DIR="
+)
+
 :: -- Find Emscripten SDK --
 if defined EMSDK (
     set "EMSDK_DIR=!EMSDK!"
@@ -131,6 +139,11 @@ set "EMMAKE=!EMSDK_DIR!\upstream\emscripten\emmake.bat"
 set "PLUGIN_SRC_FWD=!PLUGIN_SRC_DIR:\=/!"
 set "WONDERLAB_FWD=!WONDERLAB_DIR:\=/!"
 set "BINARY_DATA_FWD=!BINARY_DATA_DIR:\=/!"
+if defined WIZARDCORE_SRC_DIR (
+    set "WIZARDCORE_SRC_FWD=!WIZARDCORE_SRC_DIR:\=/!"
+) else (
+    set "WIZARDCORE_SRC_FWD="
+)
 
 mkdir "%WEB_BUILD_DIR%" 2>nul
 cd "%WEB_BUILD_DIR%"
@@ -148,8 +161,8 @@ echo set(PLUGIN_SRC_DIR "%PLUGIN_SRC_FWD%"^)
 echo set(WONDERLAB_DIR "%WONDERLAB_FWD%"^)
 echo set(PLUGIN_PROCESSOR_HEADER "PluginProcessor.h"^)
 echo set(PLUGIN_PROCESSOR_CLASS audio_plugin::AudioPluginAudioProcessor^)
-echo set(PLUGIN_EXTRA_INCLUDE_DIRS "%BINARY_DATA_FWD%"^)
-echo set(PLUGIN_EXTRA_SOURCE_DIRS "%BINARY_DATA_FWD%"^)
+echo set(PLUGIN_EXTRA_INCLUDE_DIRS "%BINARY_DATA_FWD%;!WIZARDCORE_SRC_FWD!"^)
+echo set(PLUGIN_EXTRA_SOURCE_DIRS "%BINARY_DATA_FWD%;!WIZARDCORE_SRC_FWD!"^)
 echo.
 echo include(%WONDERLAB_FWD%/cmake/WonderlabBuild.cmake^)
 ) > CMakeLists.txt
@@ -227,11 +240,6 @@ scp -P %SERVER_PORT% -i "%SSH_KEY%" -o StrictHostKeyChecking=no "%WEB_BUILD_DIR%
 scp -P %SERVER_PORT% -i "%SSH_KEY%" -o StrictHostKeyChecking=no "%WEB_BUILD_DIR%\plugin-config.js" %SERVER%:%DEST%
 scp -P %SERVER_PORT% -i "%SSH_KEY%" -o StrictHostKeyChecking=no "%WEB_BUILD_DIR%\!REPOSITORY_NAME!Web.js" %SERVER%:%DEST%
 scp -P %SERVER_PORT% -i "%SSH_KEY%" -o StrictHostKeyChecking=no "%WEB_BUILD_DIR%\!REPOSITORY_NAME!Web.wasm" %SERVER%:%DEST%
-if exist "%WEB_BUILD_DIR%\!REPOSITORY_NAME!WebFallback.js" (
-    echo         Uploading fallback WASM...
-    scp -P %SERVER_PORT% -i "%SSH_KEY%" -o StrictHostKeyChecking=no "%WEB_BUILD_DIR%\!REPOSITORY_NAME!WebFallback.js" %SERVER%:%DEST%
-    scp -P %SERVER_PORT% -i "%SSH_KEY%" -o StrictHostKeyChecking=no "%WEB_BUILD_DIR%\!REPOSITORY_NAME!WebFallback.wasm" %SERVER%:%DEST%
-)
 
 if exist "%WEB_BUILD_DIR%\audio\*" (
     echo         Uploading audio samples...
@@ -243,7 +251,7 @@ echo         Uploading .htaccess...
 echo DirectoryIndex index.html
 echo.
 echo Header set Cross-Origin-Opener-Policy "same-origin"
-echo Header set Cross-Origin-Embedder-Policy "require-corp"
+echo Header set Cross-Origin-Embedder-Policy "credentialless"
 echo Header set Cache-Control "no-cache, no-store, must-revalidate"
 echo.
 echo Header set X-Frame-Options "ALLOWALL"
