@@ -3,6 +3,10 @@ description:
 globs: 
 alwaysApply: true
 ---
+
+# Notes
+- Use dev-logs.md to keep a running log and memory of all development tasks completed, for historical purposes and llm context.
+
 # Mr. Wizard API Design Rules
 
 ## Preferred Nomenclature Consistency

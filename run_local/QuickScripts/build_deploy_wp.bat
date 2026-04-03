@@ -177,7 +177,7 @@ if %errorlevel% neq 0 (
     pause
     exit /b 1
 )
-cd "%~dp0\.."
+cd "%~dp0\..\.."
 
 :: -- Copy web assets --
 echo         Copying web assets...
@@ -228,6 +228,8 @@ echo put "!WEB_BUILD_DIR!\index.html"
 echo put "!WEB_BUILD_DIR!\plugin-config.js"
 echo put "!WEB_BUILD_DIR!\!REPO!Web.js"
 echo put "!WEB_BUILD_DIR!\!REPO!Web.wasm"
+echo put "!WEB_BUILD_DIR!\!REPO!WebFallback.js"
+echo put "!WEB_BUILD_DIR!\!REPO!WebFallback.wasm"
 ) > "!CMDS!"
 
 REM Include PHP files only if they were copied (optional, WordPress-specific)
