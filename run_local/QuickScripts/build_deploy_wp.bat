@@ -203,7 +203,7 @@ set "SAMPLE_DIR=%cd%\plugin\sample_audio"
 set "TRACK_LIST="
 if exist "!SAMPLE_DIR!" (
     if not exist "!WEB_BUILD_DIR!\audio" mkdir "!WEB_BUILD_DIR!\audio"
-    for %%f in ("!SAMPLE_DIR!\*.*") do (
+    for %%f in ("!SAMPLE_DIR!\*.wav" "!SAMPLE_DIR!\*.mp3" "!SAMPLE_DIR!\*.ogg" "!SAMPLE_DIR!\*.flac" "!SAMPLE_DIR!\*.aiff") do (
         copy "%%f" "!WEB_BUILD_DIR!\audio\" >nul
         if defined TRACK_LIST (
             set "TRACK_LIST=!TRACK_LIST!, { title: '%%~nf', file: 'audio/%%~nxf' }"

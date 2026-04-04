@@ -202,7 +202,7 @@ set "TRACK_LIST="
 if exist "!SAMPLE_DIR!" (
     echo         Copying audio samples...
     mkdir "%WEB_BUILD_DIR%\audio" 2>nul
-    for %%f in ("!SAMPLE_DIR!\*.*") do (
+    for %%f in ("!SAMPLE_DIR!\*.wav" "!SAMPLE_DIR!\*.mp3" "!SAMPLE_DIR!\*.ogg" "!SAMPLE_DIR!\*.flac" "!SAMPLE_DIR!\*.aiff") do (
         copy "%%f" "%WEB_BUILD_DIR%\audio\" >nul
         if defined TRACK_LIST (
             set "TRACK_LIST=!TRACK_LIST!, { title: '%%~nf', file: 'audio/%%~nxf' }"
@@ -265,7 +265,8 @@ scp -P %SERVER_PORT% -i "%SSH_KEY%" -o StrictHostKeyChecking=no "%TEMP%\htaccess
 echo.
 echo  =========================================================================
 echo    Done!
-echo    Deployed to: %SERVER%%DEST%
+echo    Deployed to: https://www.CaulfieldEngineering.com/plug-ins/!REPOSITORY_NAME!/web/index.html
+start "" "https://www.CaulfieldEngineering.com/plug-ins/!REPOSITORY_NAME!/web/index.html"
 echo  =========================================================================
 echo.
 pause
