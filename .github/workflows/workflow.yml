@@ -18,7 +18,6 @@ jobs:
   # Job: Build
   # ==========================================================================================
   build:
-    if: github.event.repository.name != 'NewPluginTemplate' && !contains(github.event.head_commit.message, 'Initial commit')
     permissions:
       contents: write
 
@@ -1026,14 +1025,19 @@ jobs:
     # ==========================================================================================
     - name: Upload Installer to Server (SCP)
       if: steps.check_ssh.outputs.ssh_available == 'true'
+      env:
+        REPOSITORY_NAME: ${{ github.event.repository.name }}
       shell: bash
       run: |
         set -e  # Exit immediately if any command exits with a non-zero status
 
         echo "SSH credentials available. Starting installer upload..."
 
+        REPO_NAME=$(echo $GITHUB_REPOSITORY | awk -F / '{print $2}')
+        echo "REPO_NAME set to: $REPO_NAME"
+
         # Set destination path (installers subfolder)
-        DEST_PATH="/home/caulfiel/public_html/plug-ins/${wPLUGIN_NAME}/installers/"
+        DEST_PATH="/home/caulfiel/public_html/plug-ins/${REPO_NAME}/installers/"
         SERVER="CaulfieldEngineering.com"
 
         echo "Checking if destination directory exists on the server..."
@@ -1076,7 +1080,7 @@ jobs:
           exit 1
         fi
 
-        echo "Installer deployed to: https://caulfieldengineering.com/plug-ins/${wPLUGIN_NAME}/${INSTALLER_NAME}"
+        echo "Installer deployed to: https://caulfieldengineering.com/plug-ins/${REPO_NAME}/${INSTALLER_NAME}"
 
 
 
@@ -1130,7 +1134,6 @@ jobs:
   # to CaulfieldEngineering.com/plug-ins/{repo_name}/web/
   # ==========================================================================================
   web-build:
-    if: github.event.repository.name != 'NewPluginTemplate' && !contains(github.event.head_commit.message, 'Initial commit')
     needs: build
     runs-on: ubuntu-latest
     permissions:
@@ -1151,6 +1154,16 @@ jobs:
       with:
         repository: CaulfieldEngineering/Wonderlab
         path: Wonderlab
+        token: ${{ secrets.CE_GITHUB_PAT }}
+
+    # Checkout WizardCore (shared DSP library)
+    # ==========================================================================================
+    - name: Checkout WizardCore
+      uses: actions/checkout@v4
+      with:
+        repository: CaulfieldEngineering/WizardCore
+        ref: staging
+        path: WizardCore
         token: ${{ secrets.CE_GITHUB_PAT }}
 
 
@@ -1216,6 +1229,7 @@ jobs:
         set -e
 
         WONDERLAB_DIR="${GITHUB_WORKSPACE}/Wonderlab"
+        WIZARDCORE_SRC_DIR="${GITHUB_WORKSPACE}/WizardCore/plugin/source"
         PLUGIN_SRC_DIR="${GITHUB_WORKSPACE}/plugin/source"
         WEB_BUILD_DIR="${GITHUB_WORKSPACE}/build/web"
         echo "Plugin:  ${wPLUGIN_NAME} v${wPROJECT_VERSION}"
@@ -1249,8 +1263,8 @@ jobs:
           echo "set(WONDERLAB_DIR \"${WONDERLAB_DIR}\")"
           echo 'set(PLUGIN_PROCESSOR_HEADER "PluginProcessor.h")'
           echo 'set(PLUGIN_PROCESSOR_CLASS audio_plugin::AudioPluginAudioProcessor)'
-          echo "set(PLUGIN_EXTRA_INCLUDE_DIRS \"${BINARY_DATA_DIR}\")"
-          echo "set(PLUGIN_EXTRA_SOURCE_DIRS \"${BINARY_DATA_DIR}\")"
+          echo "set(PLUGIN_EXTRA_INCLUDE_DIRS \"${BINARY_DATA_DIR};${WIZARDCORE_SRC_DIR}\")"
+          echo "set(PLUGIN_EXTRA_SOURCE_DIRS \"${BINARY_DATA_DIR};${WIZARDCORE_SRC_DIR}\")"
           echo ''
           echo 'include(${WONDERLAB_DIR}/cmake/WonderlabBuild.cmake)'
         } > CMakeLists.txt
@@ -1293,7 +1307,6 @@ jobs:
           mkdir -p "${WEB_BUILD_DIR}/audio"
           for f in "${SAMPLE_DIR}"/*; do
             [ -f "$f" ] || continue
-            [[ "$(basename "$f")" == "README.md" ]] && continue
             cp "$f" "${WEB_BUILD_DIR}/audio/"
             fname=$(basename "$f")
             title="${fname%.*}"
@@ -1381,6 +1394,8 @@ jobs:
     # ==========================================================================================
     - name: Deploy Web App to CaulfieldEngineering.com
       if: steps.check_ssh_web.outputs.ssh_available == 'true'
+      env:
+        REPOSITORY_NAME: ${{ github.event.repository.name }}
       shell: bash
       run: |
         set -e
@@ -1389,7 +1404,7 @@ jobs:
         WONDERLAB_DIR="${GITHUB_WORKSPACE}/Wonderlab"
 
         CE_SERVER="CaulfieldEngineering.com"
-        CE_DEST="/home/caulfiel/public_html/plug-ins/${wPLUGIN_NAME}/web/"
+        CE_DEST="/home/caulfiel/public_html/plug-ins/${REPOSITORY_NAME}/web/"
 
         echo "Deploying web app to ${CE_SERVER}:${CE_DEST}..."
 
@@ -1401,13 +1416,14 @@ jobs:
         scp "${WEB_BUILD_DIR}/${wPLUGIN_NAME}Web.js" "$CE_SERVER:${CE_DEST}"
         scp "${WEB_BUILD_DIR}/${wPLUGIN_NAME}Web.wasm" "$CE_SERVER:${CE_DEST}"
 
+        # Upload fallback WASM (mobile / iframe without shared memory)
         if [ -f "${WEB_BUILD_DIR}/${wPLUGIN_NAME}WebFallback.js" ]; then
           echo "Uploading fallback WASM..."
           scp "${WEB_BUILD_DIR}/${wPLUGIN_NAME}WebFallback.js" "$CE_SERVER:${CE_DEST}"
           scp "${WEB_BUILD_DIR}/${wPLUGIN_NAME}WebFallback.wasm" "$CE_SERVER:${CE_DEST}"
         fi
 
-        if ls "${WEB_BUILD_DIR}/audio/"* >/dev/null 2>&1; then
+        if [ -d "${WEB_BUILD_DIR}/audio" ]; then
           echo "Uploading audio samples..."
           scp "${WEB_BUILD_DIR}/audio/"* "$CE_SERVER:${CE_DEST}audio/"
         fi
@@ -1418,7 +1434,7 @@ jobs:
         echo ""
         echo "==========================================================================="
         echo "  CaulfieldEngineering.com deployed"
-        echo "  URL: https://caulfieldengineering.com/plug-ins/${wPLUGIN_NAME}/web/"
+        echo "  URL: https://caulfieldengineering.com/plug-ins/${REPOSITORY_NAME}/web/"
         echo "==========================================================================="
 
 
@@ -1426,6 +1442,8 @@ jobs:
     # ==========================================================================================
     - name: Deploy Web App to WonderlandAudio.com
       if: steps.check_ssh_web.outputs.ssh_available == 'true' && startsWith(github.ref, 'refs/tags/v')
+      env:
+        REPOSITORY_NAME: ${{ github.event.repository.name }}
       shell: bash
       run: |
         set -e
@@ -1437,7 +1455,7 @@ jobs:
 
         WP_HOST="sftp.wp.com"
         WP_USER="wonderlandaudio.wordpress.com"
-        WP_DEST="/srv/htdocs/demo/${wPLUGIN_NAME}"
+        WP_DEST="/srv/htdocs/demo/${REPOSITORY_NAME}"
 
         # Install sshpass for non-interactive SFTP password auth
         sudo apt-get install -y -q sshpass > /dev/null 2>&1
@@ -1451,6 +1469,7 @@ jobs:
         sshpass -p "${{ secrets.WORDPRESS_SFTP_PASS }}" scp -o StrictHostKeyChecking=no "${WEB_BUILD_DIR}/${wPLUGIN_NAME}Web.js" "${WP_USER}@${WP_HOST}:${WP_DEST}/"
         sshpass -p "${{ secrets.WORDPRESS_SFTP_PASS }}" scp -o StrictHostKeyChecking=no "${WEB_BUILD_DIR}/${wPLUGIN_NAME}Web.wasm" "${WP_USER}@${WP_HOST}:${WP_DEST}/"
 
+        # Upload fallback WASM (mobile / iframe without shared memory)
         if [ -f "${WEB_BUILD_DIR}/${wPLUGIN_NAME}WebFallback.js" ]; then
           echo "Uploading fallback WASM..."
           sshpass -p "${{ secrets.WORDPRESS_SFTP_PASS }}" scp -o StrictHostKeyChecking=no "${WEB_BUILD_DIR}/${wPLUGIN_NAME}WebFallback.js" "${WP_USER}@${WP_HOST}:${WP_DEST}/"
@@ -1461,7 +1480,7 @@ jobs:
         sshpass -p "${{ secrets.WORDPRESS_SFTP_PASS }}" scp -o StrictHostKeyChecking=no "${WONDERLAB_DIR}/web/index.php" "${WP_USER}@${WP_HOST}:${WP_DEST}/"
         sshpass -p "${{ secrets.WORDPRESS_SFTP_PASS }}" scp -o StrictHostKeyChecking=no "${WONDERLAB_DIR}/web/serve.php" "${WP_USER}@${WP_HOST}:${WP_DEST}/"
 
-        if ls "${WEB_BUILD_DIR}/audio/"* >/dev/null 2>&1; then
+        if [ -d "${WEB_BUILD_DIR}/audio" ]; then
           echo "Uploading audio samples..."
           sshpass -p "${{ secrets.WORDPRESS_SFTP_PASS }}" scp -o StrictHostKeyChecking=no "${WEB_BUILD_DIR}/audio/"* "${WP_USER}@${WP_HOST}:${WP_DEST}/audio/"
         fi
@@ -1469,5 +1488,5 @@ jobs:
         echo ""
         echo "==========================================================================="
         echo "  WonderlandAudio.com deployed (production)"
-        echo "  URL: https://wonderlandaudio.com/demo/${wPLUGIN_NAME}/"
+        echo "  URL: https://wonderlandaudio.com/demo/${REPOSITORY_NAME}/"
         echo "==========================================================================="
