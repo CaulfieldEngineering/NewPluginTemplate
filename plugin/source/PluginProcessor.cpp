@@ -196,7 +196,10 @@ namespace audio_plugin {
 
     juce::AudioProcessorEditor *AudioPluginAudioProcessor::createEditor() {
     	return new AudioPluginAudioProcessorEditor(*this);
-    	// return new juce::GenericAudioProcessorEditor(*this);
+    	// For prototyping with auto-sized generic UI, swap the lines above/below:
+    	// auto* editor = new juce::GenericAudioProcessorEditor(*this);
+    	// editor->setSize(500, std::max(200, (int)getParameters().size() * 40 + 40));
+    	// return editor;
     }
 
     // getStateInformation
