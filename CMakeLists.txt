@@ -18,6 +18,9 @@ endif()
 # =====================================================================
 include(${CMAKE_CURRENT_SOURCE_DIR}/config.cmake)
 
+# [Claude 2026-10-27] Stop the build if the plugin code is the template's or another plugin's
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/PluginCodes.cmake)
+
 
 # Allow environment variable to override the default version from config.cmake (e.g., GitHub tag)
 # =====================================================================
