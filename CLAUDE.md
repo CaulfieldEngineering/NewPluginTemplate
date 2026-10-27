@@ -27,8 +27,10 @@ set(wPLUGIN_NAME        "MyPlugin")
 set(wCOMPANY_NAME       "Wonderland Audio")
 set(wCOMPANY_ID         "WonderlandAudio")
 set(wPROJECT_VERSION    "0.1.0")
-set(wPLUGIN_CODE        "MPLG")   # Unique 4-char code per plugin
+set(wPLUGIN_CODE        "Mplg")   # Unique 4-char code per plugin (one capital letter)
 ```
+
+The plugin code must be unique among Wonderland Audio plugins; the manufacturer code `WLAD` is shared by all of them. The template ships with the placeholder `Tmpl`, and `cmake/PluginCodes.cmake` stops the build if a renamed plugin still uses it or reuses a taken code (Tertiary's `EXPL`, Brownout's `BRWN`, ...). Add a new plugin's code to the list there.
 
 The run_local scripts, CI/CD pipeline, and installer configs all read from `config.cmake` dynamically — no other files need hardcoded names.
 
