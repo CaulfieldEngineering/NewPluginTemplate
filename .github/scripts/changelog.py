@@ -24,7 +24,8 @@
 #     Its whole text is replaced. Everything else on the page (title, intro, other widgets) is Joe's.
 #   - Plain WordPress page (not built with Elementor): the text between <!-- wla-changelog:start --> and
 #     <!-- wla-changelog:end --> in the page content.
-# The home page's version line: the Text Editor widget whose CSS Classes include "wla-version", for example
+# The home page's version line: the Text Editor widget whose CSS Classes include "wla-version" (or the class given
+# with --version-class: on a site that sells several plugins each has its own, e.g. wla-version-<slug>), for example
 # "1.0.2, released 28 January 2026". Its one x.y.z number becomes the new version and a date in it (either
 # "28 January 2026" or "January 28, 2026") the release date, in the same style; any other words or links stay.
 #
@@ -291,6 +292,29 @@ def diff_paths(a, b, path=()):
     return [] if a == b else [path]
 
 
+def current_block(page):
+    """The block's HTML as it is on the page now ("" if none)."""
+    meta = page.get("meta") or {}
+    raw = meta.get("_elementor_data") or ""
+    if meta.get("_elementor_edit_mode") == "builder" and raw:
+        hits = find_widgets(json.loads(raw), BLOCK_CLASS)
+        return hits[0][1]["settings"].get("editor", "") if len(hits) == 1 else ""
+    content = (page.get("content") or {}).get("raw", "")
+    if START in content and END in content:
+        return content[content.index(START):content.index(END)]
+    return ""
+
+
+def dates_on_page(block_html):
+    """{version: YYYY-MM-DD} from the version headings the pipeline wrote last time."""
+    out = {}
+    for v, d in re.findall(r'class="wla-changelog-version">(\d+\.\d+\.\d+), ([^<]+)</h4>', block_html):
+        m = re.fullmatch(r"(\d{1,2}) (" + "|".join(MONTHS) + r") (\d{4})", d.strip())
+        if m:
+            out[v] = datetime.date(int(m.group(3)), MONTHS.index(m.group(2)) + 1, int(m.group(1))).isoformat()
+    return out
+
+
 def replace_block(page, block_html):
     """page: the REST page (context=edit). Returns ("elementor", new _elementor_data string) or ("content", new raw)."""
     meta = page.get("meta") or {}
@@ -322,29 +346,31 @@ def replace_block(page, block_html):
     return "content", content[:a] + block_html + content[b:]
 
 
-def set_version_line(page, version, date=None):
+def set_version_line(page, version, date=None, css_class=None):
     """Returns the home page's new _elementor_data, or None when it has no version line. A date written in the line
     ("28 January 2026" or "January 28, 2026") becomes <date> in the same style; a line with no date keeps none."""
     meta = page.get("meta") or {}
     raw = meta.get("_elementor_data") or ""
     if not raw:
         return None
+    css_class = css_class or VERSION_CLASS
     data = json.loads(raw)
-    hits = find_widgets(data, VERSION_CLASS)
+    hits = find_widgets(data, css_class)
     if not hits:
         return None
+    if len(hits) != 1 or hits[0][1].get("widgetType") != "text-editor":
+        raise Fail(f"The home page should have exactly one Text Editor widget with the CSS class '{css_class}'; it has "
+                   f"{[el.get('widgetType') for _, el in hits]}. Nothing was changed.")
     new = json.loads(raw)
     allowed = []
     for path, el in hits:
         target = new
         for k in path:
             target = target[k]
-        field = "editor" if "editor" in target["settings"] else "title" if "title" in target["settings"] else None
-        if field is None:
-            raise Fail(f"The '{VERSION_CLASS}' widget {el.get('id')} has no text to change. Nothing was changed.")
-        txt = target["settings"][field]
+        field = "editor"
+        txt = target["settings"].get(field, "")
         if len(VERSION_RE.findall(txt)) != 1:
-            raise Fail(f"The home page's '{VERSION_CLASS}' widget {el.get('id')} should hold exactly one x.y.z "
+            raise Fail(f"The home page's '{css_class}' widget {el.get('id')} should hold exactly one x.y.z "
                        f"version; it reads '{txt}'. Nothing was changed.")
         txt = VERSION_RE.sub(version, txt)
         if date:
@@ -358,12 +384,12 @@ def set_version_line(page, version, date=None):
     return json.dumps(new, ensure_ascii=False, separators=(",", ":"))
 
 
-def version_line_texts(page):
+def version_line_texts(page, css_class=None):
     raw = (page.get("meta") or {}).get("_elementor_data") or ""
     if not raw:
         return []
     return [(el["settings"].get("editor") or el["settings"].get("title") or "")
-            for _, el in find_widgets(json.loads(raw), VERSION_CLASS)]
+            for _, el in find_widgets(json.loads(raw), css_class or VERSION_CLASS)]
 
 
 # ------------------------------------------------------------------------------------------
@@ -484,19 +510,61 @@ class FileSite:
         pass
 
 
+def visible_text(fragment):
+    """What a reader sees in an HTML fragment, normalised for comparing (WordPress turns ' into a curly quote, wraps
+    lines in <p>, and so on)."""
+    t = re.sub(r"<!--.*?-->", " ", fragment, flags=re.S)
+    t = html.unescape(re.sub(r"<[^>]+>", " ", t))
+    for a, b in (("\u2018", "'"), ("\u2019", "'"), ("\u201c", '"'), ("\u201d", '"'), ("\u2013", "-"),
+                 ("\u2014", "-"), ("\u2026", "..."), ("\u00a0", " "), ("\u2032", "'")):
+        t = t.replace(a, b)
+    return re.sub(r"\s+", " ", t).strip()
+
+
+def links(fragment):
+    return sorted(html.unescape(u) for u in re.findall(r'href="([^"]+)"', fragment))
+
+
+def served_widget(body, css_class):
+    """The inside of the one rendered widget with this CSS class in a page's HTML, or None."""
+    m = list(re.finditer(r'<div class="elementor-element[^"]*\s' + re.escape(css_class) + r'[\s"]', body))
+    if len(m) != 1:
+        return None
+    rest = body[m[0].end():]
+    rest = rest[rest.find(">") + 1:]   # past the rest of the widget's opening tag
+    nxt = re.search(r'<div class="elementor-element\b', rest)
+    return rest[:nxt.start()] if nxt else rest
+
+
+def served_block(body):
+    """The changelog block as served: between the markers (kept in the HTML on both Elementor and plain pages)."""
+    if body.count(START) != 1 or body.count(END) != 1:
+        return None
+    return body[body.index(START):body.index(END) + len(END)]
+
+
 def installer_title(plugin, version, platform):
     # Must match the titles the "Upload Installers to WordPress" step gives the uploads (test_changelog.py checks it)
     return f"{plugin} Installer v{version} for {platform}"
 
 
-def publish(site, entries, version, page_id, plugin, dry_run=False, release_date=None, lookup=tag_date):
+def publish(site, entries, version, page_id, plugin, dry_run=False, release_date=None, lookup=tag_date,
+            version_class=VERSION_CLASS):
     check(entries, version)
-    resolve_dates(entries, version, release_date, lookup)
-    print(f"{version} is dated {nice_date(entries[0]['date'])}")
+    drafts = [e["version"] for e in entries if e["draft"] and vkey(e["version"]) <= vkey(version)]
+    if drafts:
+        raise Fail(f"CHANGELOG.md entries still marked as drafts would be published: {', '.join(drafts)}. "
+                   "Delete their '<!-- draft' lines first. Nothing was changed.")
     log = print
     page = site.page(page_id)
     if not dry_run and page.get("status") != "publish":
         raise Fail(f"The changelog page {page_id} is '{page.get('status')}', not published. Nothing was changed.")
+    # An entry headed "(release date)" keeps the date it was first published with: an older one on a later release,
+    # and this one on a re-run (a lightweight tag has no date of its own, so asking again could give another day)
+    published = dates_on_page(current_block(page))
+    resolve_dates(entries, version, release_date,
+                  lambda v, current=False: published.get(v) or lookup(v, current))
+    log(f"{version} is dated {nice_date(entries[0]['date'])}")
 
     prev = None
     pv = previous_version(entries, version)
@@ -520,65 +588,108 @@ def publish(site, entries, version, page_id, plugin, dry_run=False, release_date
     home_new = None
     if home_id and home_id != page_id:
         home = site.page(home_id)
-        home_new = set_version_line(home, version, entries[0]["date"])
+        home_new = set_version_line(home, version, entries[0]["date"], version_class)
         if home_new is None:
-            log(f"The home page ({home_id}) has no '{VERSION_CLASS}' widget; no version line to update.")
+            log(f"The home page ({home_id}) has no '{version_class}' widget; no version line to update.")
 
-    site.write_page(page_id, kind, new_value)
+    # Read both pages again right before writing. If either changed since (Joe saving in Elementor), build the change
+    # again on the fresh copy so his edit is kept. WordPress has no "write only if unchanged", so a save landing in the
+    # second between this read and the write could still be lost; the read-back below would then show it.
+    def settle(pid, first, build):
+        current, value = first, build(first)
+        for attempt in range(3):
+            fresh = site.page(pid)
+            if fresh.get("meta") == current.get("meta") and (fresh.get("content") or {}).get("raw") == \
+                    (current.get("content") or {}).get("raw"):
+                return current, value
+            log(f"Page {pid} changed on the site meanwhile; building the change again on the new copy.")
+            current, value = fresh, build(fresh)
+        raise Fail(f"Page {pid} keeps changing on the site (someone is editing it). Nothing was changed; re-run the job.")
+
+    page, (kind, new_value) = settle(page_id, page, lambda pg: replace_block(pg, block))
     if home_new is not None:
-        site.write_page(home_id, "elementor", home_new)
-    site.clear_cache()
+        def build_home(pg):
+            v = set_version_line(pg, version, entries[0]["date"], version_class)
+            if v is None:
+                raise Fail("The home page's version line disappeared while the release ran. Nothing was changed.")
+            return v
+        home, home_new = settle(home_id, home, build_home)
+
     if dry_run:
+        site.write_page(page_id, kind, new_value)
+        if home_new is not None:
+            site.write_page(home_id, "elementor", home_new)
         open(os.path.join(site.out, "block.html"), "w", encoding="utf-8", newline="\n").write(block)
         log(f"Dry run: wrote {site.out}/page-{page_id}.*, block.html" + (f", page-{home_id}.*" if home_new else ""))
         return
 
-    # Read back: the stored data is exactly what was sent
-    back = site.page(page_id)
-    got = (back.get("meta") or {}).get("_elementor_data") if kind == "elementor" else back["content"]["raw"]
-    if kind == "elementor":
-        if json.loads(got) != json.loads(new_value):
-            raise Fail("The changelog page's data reads back different from what was sent.")
-    elif got != new_value:
-        raise Fail("The changelog page's content reads back different from what was sent.")
+    old_value = page["meta"]["_elementor_data"] if kind == "elementor" else page["content"]["raw"]
+
+    def same(pid, k, sent):
+        back = site.page(pid)
+        got = (back.get("meta") or {}).get("_elementor_data") if k == "elementor" else (back.get("content") or {}).get("raw")
+        try:
+            return back, (json.loads(got) == json.loads(sent)) if k == "elementor" else got == sent
+        except (TypeError, ValueError):
+            return back, False
+
+    # Write the changelog page, then the home page. If the home page can't be written, the changelog page is put
+    # back as it was, so the site never shows the new version in one place and the old one in the other.
+    try:
+        site.write_page(page_id, kind, new_value)
+    except Fail as e:
+        _, done = same(page_id, kind, new_value)   # a write that failed on the way back may still have landed
+        if not done:
+            raise Fail(f"Writing the changelog page failed ({e}). Nothing was changed.")
+    back, ok = same(page_id, kind, new_value)
+    if not ok:
+        raise Fail("The changelog page's data reads back different from what was sent (an edit landed at the same "
+                   "moment?). Check the page in Elementor, then re-run the job.")
     log(f"✓ Changelog page {page_id} written and read back")
     if home_new is not None:
-        hb = site.page(home_id)
-        if json.loads(hb["meta"]["_elementor_data"]) != json.loads(home_new):
-            raise Fail("The home page's data reads back different from what was sent.")
+        try:
+            site.write_page(home_id, "elementor", home_new)
+            hb, ok = same(home_id, "elementor", home_new)
+            if not ok:
+                raise Fail("The home page's data reads back different from what was sent.")
+        except Fail as e:
+            try:
+                site.write_page(page_id, kind, old_value)
+                site.clear_cache()
+                undo = "the changelog page was put back as it was"
+            except Fail as e2:
+                undo = f"putting the changelog page back ALSO failed ({e2}): it shows {version}, the home page doesn't"
+            raise Fail(f"The home page's version line could not be set ({e}); {undo}. Re-run the job.")
         log(f"✓ Home page {home_id} version line set to {version} and read back")
+    site.clear_cache()
 
-    # Live: what a visitor gets (a unique query string, so no page cache answers)
-    wanted = [f"{e['version']}, {nice_date(e['date'])}" for e in entries if vkey(e["version"]) <= vkey(version)]
-    if prev:
-        wanted += [prev[1], prev[2]]
+    # Live: what a visitor gets (a unique query string, so no page cache answers). The block as served must read
+    # exactly like the block that was written, with the same links; the version line likewise.
+    want_text, want_links = visible_text(block), links(block)
+    got = None
     for attempt in range(6):
         code, body = site.public(back["link"])
-        text = html.unescape(body)
-        missing = [w for w in wanted if w not in text]
-        pos = [text.find(w) for w in wanted[:len(wanted) - (2 if prev else 0)]]
-        if code == 200 and not missing and pos == sorted(pos):   # every entry, newest first
+        got = served_block(body) if code == 200 else None
+        if got is not None and visible_text(got) == want_text and links(got) == want_links:
             break
         time.sleep(10)
     else:
-        raise Fail(f"The live changelog page {back['link']} (HTTP {code}) is missing: {missing}. "
-                   "The data is stored; Elementor > Tools > Clear Files & Data, then look again.")
-    log(f"✓ Live changelog page shows {version} first and every older entry")
+        raise Fail(f"The live changelog page {back['link']} (HTTP {code}) does not show what was written"
+                   + (f": it reads '{visible_text(got)[:300]}...'" if got else " (no changelog block found in it)")
+                   + ". The data is stored; Elementor > Tools > Clear Files & Data, then look again.")
+    log(f"✓ Live changelog page shows exactly the new block ({version} first, every older entry)")
     if home_new is not None:
-        d = datetime.date.fromisoformat(entries[0]["date"])
-        dates = (nice_date(entries[0]["date"]), f"{MONTHS[d.month - 1]} {d.day}, {d.year}")
-        has_date = any(DATE_TEXT_RE.search(t) for t in version_line_texts(hb))
+        want = visible_text(version_line_texts(hb, version_class)[0])
         for attempt in range(6):
             code, body = site.public(site.site + "/")   # the front page (its own link redirects to /)
-            i = body.find(VERSION_CLASS)
-            near = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html.unescape(body[i:i + 3000]))) if i >= 0 else ""
-            if code == 200 and version in near and (not has_date or any(x in near for x in dates)):
+            w = served_widget(body, version_class) if code == 200 else None
+            if w is not None and visible_text(w) == want:
                 break
             time.sleep(10)
         else:
-            raise Fail(f"The live home page (HTTP {code}) does not show {version}"
-                       + (f" released {dates[0]}" if has_date else "") + " in its version line.")
-        log(f"✓ Live home page shows version {version}" + (f", released {dates[0]}" if has_date else ""))
+            raise Fail(f"The live home page (HTTP {code}) does not show '{want}' in its version line"
+                       + (f" (it reads '{visible_text(w)}')" if w is not None else "") + ".")
+        log(f"✓ Live home page reads '{want}'")
 
 
 def main(argv=None):
@@ -591,6 +702,8 @@ def main(argv=None):
     ap.add_argument("--prev-win")
     ap.add_argument("--page-id", type=int, help="the changelog page (wCHANGELOG_PAGE_ID in config.cmake)")
     ap.add_argument("--plugin-name", help="wPLUGIN_NAME, for the installer titles in the media library")
+    ap.add_argument("--version-class", default=VERSION_CLASS,
+                    help="CSS class of the home page's version line for this product (default wla-version)")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--page-json")
     ap.add_argument("--home-json")
@@ -617,7 +730,8 @@ def main(argv=None):
                 site = FileSite(a.page_json, a.home_json, a.media_json, a.out)
             else:
                 site = LiveSite()
-            publish(site, entries, a.version, a.page_id, a.plugin_name, a.dry_run, a.release_date)
+            publish(site, entries, a.version, a.page_id, a.plugin_name, a.dry_run, a.release_date,
+                    version_class=a.version_class)
     except Fail as e:
         print(f"::error::{e}")
         return 1

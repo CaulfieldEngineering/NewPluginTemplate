@@ -25,6 +25,7 @@ set(wWOO_PRODUCT_ID             "")
 # [Claude 2026-10-30] The public changelog (README.md, "The changelog"). The store page that shows CHANGELOG.md: its
 # WordPress page id. Empty = no changelog page; a release then skips that step. Tertiary's is 4716.
 set(wCHANGELOG_PAGE_ID          "")
-# The product's short name, lower case (Tertiary's is "tertiary"): the test plan scripts/draft-changelog.mjs reads is
-# HQ/plans/<slug>-test-plan.md. Empty = wPLUGIN_NAME in lower case.
+# The product's short name, lower case (Tertiary's is "tertiary"). Empty = wPLUGIN_NAME in lower case. The release
+# updates the home page's version line only in a widget with the CSS class wla-version-<slug>, and
+# scripts/draft-changelog.mjs reads HQ/plans/<slug>-test-plan.md.
 set(wPRODUCT_SLUG               "")

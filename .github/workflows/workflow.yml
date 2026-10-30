@@ -242,7 +242,9 @@ jobs:
     - name: Check CHANGELOG.md Has an Approved Entry for This Version
       shell: bash
       run: |
-        if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+        if [ -z "${wCHANGELOG_PAGE_ID:-}" ]; then
+          echo "::warning::wCHANGELOG_PAGE_ID is not set in config.cmake: no changelog page, so CHANGELOG.md is not checked."
+        elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
           python3 .github/scripts/changelog.py check "${GITHUB_REF#refs/tags/v}"
         elif ! out=$(python3 .github/scripts/changelog.py check "$wPROJECT_VERSION"); then
           echo "::warning::Staging: ${out#::error::} A v${wPROJECT_VERSION} tag would stop here."
@@ -1378,7 +1380,7 @@ jobs:
     # .github/scripts/changelog.py publish: checks the entry again, finds the previous version's installers in the
     # media library (titled as the upload step titles them; older versions are never deleted), writes every entry up
     # to this version into the changelog page's one block (the Text Editor widget with CSS class wla-changelog; the
-    # rest of the page is never changed), sets "x.y.z, released <date>" in the home page's wla-version widget,
+    # rest of the page is never changed), sets "x.y.z, released <date>" in the home page's wla-version-<slug> widget,
     # clears Elementor's cache, reads both back and checks them live. Any mismatch fails the job. The new installers
     # are already live by then; the store's Software version (next step) waits until this passes.
     # Skipped when wCHANGELOG_PAGE_ID in config.cmake is empty.
@@ -1390,8 +1392,10 @@ jobs:
           echo "::warning::wCHANGELOG_PAGE_ID is not set in config.cmake: no changelog page to update."
           exit 0
         fi
+        # Each product's home-page version line has its own class, so two plugins on one site never touch each other's
+        SLUG="${wPRODUCT_SLUG:-$(echo "$wPLUGIN_NAME" | tr '[:upper:]' '[:lower:]')}"
         python3 .github/scripts/changelog.py publish "${GITHUB_REF#refs/tags/v}" \
-          --page-id "$wCHANGELOG_PAGE_ID" --plugin-name "$wPLUGIN_NAME"
+          --page-id "$wCHANGELOG_PAGE_ID" --plugin-name "$wPLUGIN_NAME" --version-class "wla-version-${SLUG}"
 
 
     # Tell existing users about the new version - Tag Only, last

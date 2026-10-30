@@ -71,15 +71,18 @@ class FakeLive:
     """Stands in for LiveSite: in-memory pages; the public page is rendered from the stored data unless told not to."""
     site = "https://s"
 
-    def __init__(self, pages, front=20, media=MEDIA, stale=False, mangle=False, dead=()):
+    def __init__(self, pages, front=20, media=MEDIA, stale=False, mangle=False, dead=(), fail_write=None, wrong_bullets=False):
         self.pages = {p["id"]: copy.deepcopy(p) for p in pages}
         self.front, self.media, self.stale, self.mangle, self.dead = front, media, stale, mangle, dead
+        self.fail_write, self.wrong_bullets = fail_write, wrong_bullets
         self.writes, self.cleared = [], 0
         self.served = {pid: self.render(pid) for pid in self.pages}
 
     def render(self, pid):
+        # as Elementor renders it: one div per element, its CSS classes after its own, WordPress's curly apostrophes
         return "<html>" + "".join(
-            f'<div class="{" ".join(cl.classes(el))}">{el["settings"].get("editor", "")}</div>'
+            f'<div class="elementor-element elementor-element-{el["id"]} {" ".join(cl.classes(el))} elementor-widget">'
+            f'<div class="elementor-widget-container">{el["settings"].get("editor", "").replace(chr(39), "&#8217;")}</div></div>'
             for el in self.walk(json.loads(self.pages[pid]["meta"]["_elementor_data"]))) + "</html>"
 
     def walk(self, els):
@@ -98,6 +101,8 @@ class FakeLive:
         return hits[0]["source_url"] if hits else None
 
     def write_page(self, pid, kind, value):
+        if pid == self.fail_write:
+            raise cl.Fail(f"POST page {pid} answered HTTP 500")
         self.writes.append((pid, kind))
         self.pages[pid]["meta"]["_elementor_data"] = value if not self.mangle else value.replace("1.1.0", "1.1.O")
 
@@ -105,6 +110,8 @@ class FakeLive:
         self.cleared += 1
         if not self.stale:
             self.served = {pid: self.render(pid) for pid in self.pages}
+        if self.wrong_bullets:   # headings right, a bullet wrong: must not pass
+            self.served[10] = self.served[10].replace("Runs on", "Ran on")
 
     def public(self, url):
         pid = 20 if url == self.site + "/" else next(p for p in self.pages if self.pages[p]["link"] == url)
@@ -295,8 +302,8 @@ class Publish(unittest.TestCase):
         body = s.served[10]
         self.assertIn("1.1.0, 30 October 2026", body)
         self.assertIn("https://s/u/PlugMacInstaller_1.0.2.pkg", body)
-        self.assertIn("Joe's intro", body)
-        self.assertIn("Joe's footnote", body)
+        self.assertIn("Joe's intro", cl.visible_text(body))
+        self.assertIn("Joe's footnote", cl.visible_text(body))
         self.assertIn("1.1.0, released 30 October 2026", s.served[20])
 
     def test_refuses_draft_before_touching_anything(self):
@@ -333,6 +340,75 @@ class Publish(unittest.TestCase):
     def test_stale_live_page_fails(self):
         with self.assertRaisesRegex(cl.Fail, "live changelog page"):
             self.run_publish(FakeLive([page(), home()], stale=True))
+
+    def test_older_draft_entry_is_never_published(self):
+        s = FakeLive([page(), home()])
+        with self.assertRaisesRegex(cl.Fail, "1.0.2"):
+            cl.publish(s, cl.parse(LOG.replace("- Windows: no runtime", "<!-- draft -->\n- Windows: no runtime")),
+                       "1.1.0", 10, "Plug", lookup=lookup({"1.1.0": "2026-10-30"}))
+        self.assertEqual(s.writes, [])
+
+    def test_older_placeholder_keeps_its_published_date(self):
+        # 1.1.0 went out as "(release date)" on 30 October; at 1.2.0 a lightweight tag lookup would say 28 October
+        published = cl.render(cl.resolve_dates(cl.parse(LOG), "1.1.0", "2026-10-30", lookup({})), "1.1.0")
+        text = "## 1.2.0 (release date)\n- New.\n\n" + LOG[LOG.index("## 1.1.0"):]
+        s = FakeLive([page(data=page_data(published)), home("<p>1.1.0, released 30 October 2026</p>")])
+        cl.publish(s, cl.parse(text), "1.2.0", 10, "Plug", lookup=lookup({"1.2.0": "2026-12-01", "1.1.0": "2026-10-28"}))
+        self.assertIn("1.1.0, 30 October 2026", s.served[10])
+        self.assertIn("1.2.0, 1 December 2026", s.served[10])
+
+    def test_edit_made_meanwhile_is_kept(self):
+        s = FakeLive([page(), home()])
+        real_page = s.page
+        calls = {"n": 0}
+
+        def page_then_joe_edits(pid):
+            calls["n"] += pid == 10
+            if pid == 10 and calls["n"] == 2:   # between the first read and the write, Joe saves in Elementor
+                d = json.loads(s.pages[10]["meta"]["_elementor_data"])
+                d[0]["elements"][1]["settings"]["editor"] = "<p>Joe's new intro</p>"
+                s.pages[10]["meta"]["_elementor_data"] = json.dumps(d)
+                s.pages[10]["modified"] = "later"
+            return real_page(pid)
+        s.page = page_then_joe_edits
+        self.run_publish(s)
+        self.assertIn("Joe's new intro", cl.visible_text(s.served[10]))
+        self.assertIn("1.1.0, 30 October 2026", s.served[10])
+
+    def test_wrong_bullet_live_fails(self):
+        with self.assertRaisesRegex(cl.Fail, "does not show what was written"):
+            self.run_publish(FakeLive([page(), home()], wrong_bullets=True))
+
+    def test_home_write_fails_changelog_put_back(self):
+        s = FakeLive([page(), home()], fail_write=20)
+        before = s.pages[10]["meta"]["_elementor_data"]
+        with self.assertRaisesRegex(cl.Fail, "put back as it was"):
+            self.run_publish(s)
+        self.assertEqual(json.loads(s.pages[10]["meta"]["_elementor_data"]), json.loads(before))
+        self.assertNotIn("1.1.0", s.served[10])
+
+    def test_retry_keeps_first_publication_date(self):
+        s = FakeLive([page(), home()])
+        self.run_publish(s)
+        # the same version again the next day (a lightweight tag: "today" has moved on)
+        cl.publish(s, cl.parse(LOG), "1.1.0", 10, "Plug", lookup=lookup({"1.1.0": "2026-10-31"}))
+        self.assertIn("1.1.0, 30 October 2026", s.served[10])
+        self.assertIn("1.1.0, released 30 October 2026", s.served[20])
+
+    def test_two_version_lines_refused(self):
+        h = home()
+        d = json.loads(h["meta"]["_elementor_data"])
+        d[0]["elements"][1]["settings"]["_css_classes"] = "wla-version"
+        d[0]["elements"][1]["settings"]["editor"] = "<p>1.0.2</p>"
+        h["meta"]["_elementor_data"] = json.dumps(d)
+        with self.assertRaisesRegex(cl.Fail, "exactly one Text Editor"):
+            cl.set_version_line(h, "1.1.0")
+
+    def test_other_product_class_leaves_home_alone(self):
+        s = FakeLive([page(), home()])
+        cl.publish(s, cl.parse(LOG), "1.1.0", 10, "Plug", lookup=lookup({"1.1.0": "2026-10-30"}),
+                   version_class="wla-version-otherplugin")
+        self.assertEqual(s.writes, [(10, "elementor")])
 
     def test_home_without_version_line(self):
         h = home()
