@@ -22,4 +22,9 @@ set(wMACOS_MIN_VERSION          "11.0")
 # product has a working key source before publishing, and sets its "Software version" (what the plugin's
 # version check reports) once the new installers are live. Tertiary's is 45.
 set(wWOO_PRODUCT_ID             "")
-
+# [Claude 2026-10-30] The public changelog (README.md, "The changelog"). The store page that shows CHANGELOG.md: its
+# WordPress page id. Empty = no changelog page; a release then skips that step. Tertiary's is 4716.
+set(wCHANGELOG_PAGE_ID          "")
+# The product's short name, lower case (Tertiary's is "tertiary"): the test plan scripts/draft-changelog.mjs reads is
+# HQ/plans/<slug>-test-plan.md. Empty = wPLUGIN_NAME in lower case.
+set(wPRODUCT_SLUG               "")

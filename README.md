@@ -23,6 +23,8 @@ Ported from Tertiary, 2026-10-29. A plugin made from this template gets the whol
 | `wFORMATS` | Which bundles are built, signed, packaged, verified and tested (VST3, AU, Standalone). The Mac installer's choices are generated from it (`cmake/installer_formats.cmake`) |
 | `wMACOS_MIN_VERSION` | The oldest macOS (set before `project()`); the Mac CI checks every binary against it |
 | `wWOO_PRODUCT_ID` | The WooCommerce product. Required for a release: its key source is checked before publishing, and its Software version is set after |
+| `wCHANGELOG_PAGE_ID` | The WordPress page that shows `CHANGELOG.md` (see "The changelog" below). Empty: no changelog page, the step is skipped |
+| `wPRODUCT_SLUG` | The product's short lower-case name (empty: `wPLUGIN_NAME` in lower case); `scripts/draft-changelog.mjs` reads `HQ/plans/<slug>-test-plan.md` |
 
 Write one `set(wKEY value)` per line with no comment after it: the workflows read the file line by line.
 
@@ -40,11 +42,21 @@ A **work branch** (any name), then **staging**, then **production**, then a **v\
 
 1. **preflight**: on a tag, the tag must be on `production` (a GitHub fetch problem keeps the tag and asks for a re-run, it never deletes it), match `wPROJECT_VERSION` and be newer than every tag. Every release secret must be set: Azure signing, Apple signing, notarization, WordPress, the web demo, plus `wWOO_PRODUCT_ID`. The store product must have a working key source (a "Generator rule" with no generator fails). On staging a missing secret is a warning and that step is skipped, so staging builds can be unsigned.
 2. **build** (Mac and Windows): the build, then the unit tests and pluginval on that very build, sign, package, notarize, staple, then **verify** the final installers: the Mac pkg's signature, stapled ticket and Gatekeeper, and every bundle inside it; Authenticode on the Windows installer and binaries. A `.sha256` travels with each installer.
-3. **publish** (tag only, after both builds): both installers or neither. Hash check, check the store product again, upload, re-download and compare, point the download redirects at the new files, remove older copies, and last of all set the product's **Software version** (what the plugin's version check reports) and read it back.
+3. **publish** (tag only, after both builds): both installers or neither. Hash check, check the store product again, upload, re-download and compare, point the download redirects at the new files, remove older copies of the same version (older versions stay), publish the changelog page and the home page's version line from `CHANGELOG.md` (below), and last of all set the product's **Software version** (what the plugin's version check reports) and read it back.
 4. **web-build**: the Wonderlab demo; on a tag it goes live only after publish.
 5. **cleanup-failed-tag**: a failed release deletes its tag so it can be pushed again, except when the tag check never reached a verdict, when publishing stopped part-way, or when the tag was moved.
 
 Secrets (repository settings): `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_ENDPOINT`, `AZURE_CODE_SIGNING_NAME`, `AZURE_CERT_PROFILE_NAME`, `MAC_APPLICATION_CERTIFICATE_BASE64`, `MAC_INSTALLER_CERTIFICATE_BASE64`, `MAC_CERTIFICATE_PASSWORD`, `KEYCHAIN_PASSWORD`, `APPLE_ID`, `APPLE_TEAM_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `WORDPRESS_USERNAME`, `WORDPRESS_APPLICATION_PASSWORD`, `WORDPRESS_SITE`, `WORDPRESS_SFTP_PASS`, `CE_GITHUB_PAT`; optional `SSH_ID` (CaulfieldEngineering.com copies).
+
+### The changelog
+
+[Claude 2026-10-30] Joe: "Ideally the changelog gets auto-pushed and it's not Claude or Joe updating each time", written "ideally by AI but I'd like user-facing language". `CHANGELOG.md` is the only place it is written; the site's changelog page and the home page's version line are filled from it on every release.
+
+1. **Draft** at the release candidate, on the mini PC: `node scripts/draft-changelog.mjs` (`--dry-run` only prints). It reads what changed since the last `v*` tag (commit messages, `CLAUDE_CHANGES.md` if there is one, the regression list in `HQ/plans/<wPRODUCT_SLUG>-test-plan.md`) and has `claude -p` write the entry for a musician: at most 8 bullets, no internal IDs or code words, no em-dashes, nothing that isn't in the changes. It goes in as `## <version> (release date)` with a `<!-- draft ... -->` line under it.
+2. **Approve**: Joe edits the words if he likes and deletes the `<!-- draft` line.
+3. **Release**: preflight stops a tag whose entry is missing or still a draft, before anything is built. In publish, after the installers are live, `.github/scripts/changelog.py publish` dates the entry (a written date wins; `(release date)` becomes the tag's date in New York time), finds the previous version's installers in the media library (titled `<wPLUGIN_NAME> Installer v<x.y.z> for Mac` / `for Windows`, exactly as the upload step titles them), writes every entry up to this version into the changelog page's block with "Need the previous version? <x.y.z> for Mac · Windows" under the newest, sets "<version>, released <date>" in the home page's version line, clears Elementor's cache, reads both back and checks them live. Any mismatch fails the job.
+
+On the site the pipeline writes only: on the changelog page, the one Text Editor widget whose CSS Classes include `wla-changelog` (replaced whole; everything around it is Joe's), or on a page not built with Elementor the text between `<!-- wla-changelog:start -->` and `<!-- wla-changelog:end -->`; on the front page, the number and date in the Text Editor widget with CSS class `wla-version`, if it has one. Tests: `python3 .github/scripts/test_changelog.py` (fake site; CI runs it). A dry run against saved page data: `python .github/scripts/changelog.py publish <x.y.z> --dry-run --release-date <YYYY-MM-DD> --page-id <id> --plugin-name <name> --page-json <file> [--home-json <file>] [--media-json <file>] --out <dir>`.
 
 ## The whole process, stage by stage
 
@@ -63,6 +75,16 @@ Each stage runs its own tests, and nothing moves to the next stage until the cur
 | 8 | **Test sale** | Stage 7 done | Buy, the key arrives, it activates, a refund revokes it | Joe + auto | Live store | Fix, then stage 8 again |
 | 9 | **Sign-off**, then **merge staging into production** | Everything above green | Sign-off with the build id and every result. The merge runs no tests: production is exactly the staging code that passed | auto | Local, GitHub | n/a |
 | 10 | **Release: v\* tag on production** | **Joe says go** | `workflow.yml` on the tag: preflight, build, tests, sign and notarize, verify, publish, the Software version last | auto | GitHub | Nothing is published (or, if publishing stopped part-way, the tag is kept and the run says what to check). Fix, then back to stage 4 |
-| 11 | **Live check** | Stage 10 done | Download from the live site and install; the build id matches the signed-off one | auto | Dev PC, cloud Mac | Pull the download links, then fix |
+| 11 | **Post-release verification** | Stage 10 done | `npm run post-release -- --product <slug> --version <x.y.z>` in wla-site-tests (below): the website pass, both installers downloaded from the live site with SHA-256 against the tag's signed CI artifacts, signatures and notarization, then install and use on Windows and the cloud Mac | auto | Dev PC, cloud Mac | Pull the download links back to the previous version (Redirection), then fix |
+
+### After a release (stage 11)
+
+[Claude 2026-10-30] Joe: "Once its released to the live site, i'd like for you to always one more website pass to make sure that things like version numbers and change log etc got updated. Then download the installer from the website and just do one more install/use pass." The script is not in this repo: it lives in `wla-site-tests` (`post-release.mjs` and `mac-post-release.sh`), which serves every product. For a new plugin, add a `release` section to its `config/products/<slug>.mjs` there (copy Tertiary's), then after each tag:
+
+```
+npm run post-release -- --product <slug> --version <x.y.z> [--tag-run <GitHub run id>]
+```
+
+It checks the home page's version line (`wla-version`), the changelog page's newest entry and its previous-version links, the download redirects, the store's Software version (`wWOO_PRODUCT_ID`) and `version_check`, then runs the read-only web test; downloads both installers as a customer and compares their SHA-256 with the signed artifacts of the tag's `workflow.yml` run (artifacts are kept 90 days, so run it soon after the release); checks the Authenticode signer (Azure Trusted Signing); installs silently on Windows and leaves it installed, checks the version resources, loads the VST3 in HostTest and runs `HostTest --live-license` with a test key. `mac-post-release.sh` does the Mac half on the cloud Mac: `spctl -a -vv -t install`, `stapler validate`, install, the Info.plist versions, `auval`. A report and a one-paragraph summary; exit 1 on any failure.
 
 Details of each test folder: `plugin/tests/README.md`.
