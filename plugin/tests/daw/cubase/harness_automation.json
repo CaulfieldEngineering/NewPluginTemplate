@@ -1,0 +1,4 @@
+{
+  "_about": "Automation lanes for the Cubase harness, read by make_cubase_harness.py. lanes: { \"<JUCE parameter ID>\": [[bar, value], [bar, tick, value], ...] }, values 0..1, 480 ticks per quarter; a step is two points one tick apart. Example: \"gain\": [[1, 0.5], [5, 1.0], [9, 0, 1.0], [9, 1, 0.2]]. The template's example plugin has no parameters, so it has no lanes.",
+  "lanes": {}
+}

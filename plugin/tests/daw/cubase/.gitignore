@@ -1,0 +1,20 @@
+# Cubase harness projects ("<name> harness/"): commit the .cpr and the small Misc parts (.smt, .xml).
+# Everything below is rebuilt or per machine.
+
+# harness-input.wav: rebuilt by  python make_cubase_harness.py parts
+*/Audio/
+*/Misc/*.wav
+# Cubase's waveform caches, exports, backups
+*/Images/
+*.peak
+*/Mixdown/
+*/Auto Saves/
+*.bak
+*.csh
+*/Track Pictures/
+# run logs, screenshots and renders from run_cubase_harness.ps1
+*/Runs/
+# goldens are per machine and live outside the repo: %USERPROFILE%\.wla-test\goldens\<name>\cubase\
+*/Golden/
+
+__pycache__/
