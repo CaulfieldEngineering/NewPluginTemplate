@@ -23,6 +23,11 @@ endif()
 # =====================================================================
 set(INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include/source")
 
+# [Claude 2026-10-29] Copy the built plugin into the system plugin folders (as before). The local test runner
+# (plugin/tests/run_all.ps1) and the CI test jobs turn it off: on Windows that copy needs administrator rights.
+# =====================================================================
+option(WLA_COPY_PLUGIN_AFTER_BUILD "Copy the plugin to the system plugin folders after building" ON)
+
 # Adds a plugin target (that's basically what the Projucer does).
 # =====================================================================
 juce_add_plugin( ${PROJECT_NAME}
@@ -36,7 +41,7 @@ juce_add_plugin( ${PROJECT_NAME}
     FORMATS ${wFORMATS}
     PRODUCT_NAME "${wPLUGIN_NAME}"
     VST3_CATEGORIES ${wPLUGIN_CATEGORY}
-    COPY_PLUGIN_AFTER_BUILD TRUE
+    COPY_PLUGIN_AFTER_BUILD ${WLA_COPY_PLUGIN_AFTER_BUILD}  # [Claude 2026-10-29] was TRUE; still on by default
 )
 
 # DAW Launch Targets
@@ -95,8 +100,15 @@ endif()
 
 # Run the Python script to generate the file list
 # =====================================================================
+# [Claude 2026-10-29] Find Python instead of assuming "python3": on Windows "python3" can be the Microsoft Store
+# stub, which fails (it did on the mini PC, in Tertiary and here). Falls back to python3 if CMake finds none.
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if (NOT Python3_EXECUTABLE)
+    set(Python3_EXECUTABLE python3)
+endif()
+
 execute_process(
-    COMMAND ${CMAKE_COMMAND} -E env python3 ${CMAKE_CURRENT_SOURCE_DIR}/createSourceList.py
+    COMMAND ${CMAKE_COMMAND} -E env ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/createSourceList.py
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     RESULT_VARIABLE PYTHON_RUN_RESULT
 )
@@ -127,6 +139,16 @@ target_include_directories(${PROJECT_NAME}
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
+
+# [Claude 2026-10-29] build_id.h (commit, uncommitted changes, time), written before every build, for a hidden
+# build number in the plugin window (see PluginEditor.cpp: Ctrl+Shift+click). cmake/build_id.cmake.
+# =====================================================================
+add_custom_target(wla_build_id ALL
+    COMMAND ${CMAKE_COMMAND} -DOUT=${CMAKE_CURRENT_BINARY_DIR}/generated/build_id.h -DSRC=${CMAKE_CURRENT_SOURCE_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/build_id.cmake
+    BYPRODUCTS ${CMAKE_CURRENT_BINARY_DIR}/generated/build_id.h)
+add_dependencies(${PROJECT_NAME} wla_build_id)
+target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/generated)
 
 # Links to all necessary dependencies. The present ones are recommended by JUCE.
 # If you use one of the additional modules, like the DSP module, you need to specify it here.
@@ -205,4 +227,65 @@ if(EXISTS "${WIZARDCORE_SRC_ROOT}")
 
     list(LENGTH ALL_WIZARDCORE_FILES WIZARDCORE_FILE_COUNT)
     message(STATUS "Organized ${WIZARDCORE_FILE_COUNT} WizardCore files into Visual Studio source groups")
+endif()
+
+
+# =====================================================================
+# [Claude 2026-10-29] Test and review programs, ported from Tertiary. None is part of a release build: each is
+# switched on by an option (off by default). Names and plugin settings come from config.cmake.
+# See plugin/tests/README.md.
+# =====================================================================
+
+# The plugin settings JUCE would give its own targets, for programs that compile the plugin's sources directly
+if (wIS_SYNTH)
+    set(WLA_IS_SYNTH 1)
+else()
+    set(WLA_IS_SYNTH 0)
+endif()
+if (wNEEDS_MIDI_INPUT)
+    set(WLA_MIDI_IN 1)
+else()
+    set(WLA_MIDI_IN 0)
+endif()
+if (wNEEDS_MIDI_OUTPUT)
+    set(WLA_MIDI_OUT 1)
+else()
+    set(WLA_MIDI_OUT 0)
+endif()
+set(WLA_PLUGIN_DEFINES
+    JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_DISPLAY_SPLASH_SCREEN=0 JUCE_STANDALONE_APPLICATION=1 JUCE_MODAL_LOOPS_PERMITTED=1
+    JucePlugin_Name="${wPLUGIN_NAME}" JucePlugin_VersionString="${wPROJECT_VERSION}" JucePlugin_IsSynth=${WLA_IS_SYNTH}
+    JucePlugin_WantsMidiInput=${WLA_MIDI_IN} JucePlugin_ProducesMidiOutput=${WLA_MIDI_OUT} JucePlugin_IsMidiEffect=0)
+
+function(wla_test_program name source)
+    juce_add_console_app(${name} PRODUCT_NAME "${name}")
+    target_sources(${name} PRIVATE ${PLUGIN_SOURCES} ${source})
+    target_compile_definitions(${name} PRIVATE ${WLA_PLUGIN_DEFINES} ${ARGN})
+    target_include_directories(${name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/source
+                                               ${CMAKE_CURRENT_BINARY_DIR}/generated)
+    add_dependencies(${name} wla_build_id)
+    target_link_libraries(${name} PRIVATE ${PROJECT_NAME}BinaryData juce::juce_audio_utils juce::juce_dsp
+                                          WizardCore::AudioModules juce::juce_recommended_config_flags)
+    if (MSVC)
+        set_property(TARGET ${name} PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+    endif()
+endfunction()
+
+# ReviewRender (-DWLA_REVIEW_RENDER=ON): runs the processor (and editor, for video frames) offline. Used by the
+# render regression (tests/regression/render_matrix.py) and for review material. See review/ReviewRender.cpp.
+option(WLA_REVIEW_RENDER "Build the offline ReviewRender tool" OFF)
+if (WLA_REVIEW_RENDER)
+    wla_test_program(ReviewRender ${CMAKE_CURRENT_SOURCE_DIR}/review/ReviewRender.cpp WLA_REVIEW_RENDER_BUILD=1)
+endif()
+
+# Unit tests and the host test (-DWLA_TESTS=ON). The release pipeline builds both and runs the unit tests and
+# pluginval on the very build it signs.
+#   <wPLUGIN_NAME>Tests   unit tests on the processor (tests/PluginTests.cpp)   exit code 0 = all passed
+#   HostTest              loads the BUILT plugin (VST3, or the installed AU) as a DAW does (tests/HostTest.cpp)
+option(WLA_TESTS "Build the unit tests and the host test" OFF)
+if (WLA_TESTS)
+    wla_test_program(${PROJECT_NAME}Tests ${CMAKE_CURRENT_SOURCE_DIR}/tests/PluginTests.cpp JUCE_UNIT_TESTS=0)
+    wla_test_program(HostTest ${CMAKE_CURRENT_SOURCE_DIR}/tests/HostTest.cpp
+        JUCE_PLUGINHOST_VST3=1 JUCE_PLUGINHOST_AU=$<BOOL:${APPLE}>
+        WLA_AU_ID=",${wPLUGIN_CODE},${wPLUGIN_MANUFACTURER_CODE}")
 endif()

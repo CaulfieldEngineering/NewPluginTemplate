@@ -26,6 +26,16 @@ if(NOT DEFINED wPROJECT_VERSION AND DEFINED ENV{wPROJECT_VERSION})
 endif()
 
 
+# [Claude 2026-10-29] Oldest macOS the Mac build runs on, from wMACOS_MIN_VERSION in config.cmake (Tertiary uses
+# 11.0, Big Sur). Must be set before project(). The universal build (Apple Silicon + Intel) is chosen in the
+# workflows with -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"; plugin/tests/ci/mac_checks.sh checks both.
+# =====================================================================
+if (NOT DEFINED wMACOS_MIN_VERSION)
+    set(wMACOS_MIN_VERSION "11.0")
+endif()
+set(CMAKE_OSX_DEPLOYMENT_TARGET "${wMACOS_MIN_VERSION}" CACHE STRING "Oldest macOS supported")
+
+
 # Use the variables defined in config.cmake
 # =====================================================================
 message(STATUS "CMakeLists.txt: Setting configuration variables.")
@@ -71,6 +81,9 @@ configure_file(
   ${CMAKE_BINARY_DIR}/installer_win.iss
   @ONLY
 )
+
+# [Claude 2026-10-29] The Mac installer's choices (VST3, AU, Standalone) follow wFORMATS
+include(${CMAKE_SOURCE_DIR}/cmake/installer_formats.cmake)
 
 # Configure the macOS Distribution package file - Full
 # This substitues all $w variables with those defined in config.cmake

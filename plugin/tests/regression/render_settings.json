@@ -1,0 +1,15 @@
+{
+  "_about": "Settings for render_matrix.py. Each setting is a name and ReviewRender arguments (--set 'Name=value' in the parameter's own units or a choice's text, --ramp 'Name:t0:t1:v0:v1', --bpm, --block). A name starting with varied_ gets the 'varied' arguments added. 'quick' lists the ones --quick renders (CI). Entries starting with _ are ignored. Run ReviewRender --list for the parameter names. Fill in for this plugin.",
+  "_example_from_tertiary": {
+    "varied": ["--bpm", "100", "--set", "Input Gain=3", "--set", "Waveshape Low Band=Square", "--set", "Depth Low Band=100"],
+    "ramps": ["--ramp", "Depth High Band:0:8:0:100", "--set", "Sync to Host Low Band=0"],
+    "varied_block512": ["--block", "512"],
+    "varied_blockvar": ["--block", "var"]
+  },
+  "settings": {
+    "default": [],
+    "default_block512": ["--block", "512"],
+    "default_blockvar": ["--block", "var"]
+  },
+  "quick": ["default", "default_blockvar"]
+}

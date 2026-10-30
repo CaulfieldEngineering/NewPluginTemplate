@@ -1,5 +1,10 @@
 build/
+build-*/
 libs/
+# [Claude 2026-10-29] test output
+results/
+plugin/tests/reaper/out/
+plugin/tests/reaper/input.wav
 plugin/sourceListResult.cmake
 
 # ============================================================================

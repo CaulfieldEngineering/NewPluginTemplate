@@ -92,6 +92,8 @@ Before using QuickScripts, update the deployment configuration block at the top 
 
 The GitHub Actions workflow builds on both Mac and Windows automatically on push to `staging`. Code signing credentials are injected via GitHub secrets (set up by NewRepositoryScript).
 
+[Claude 2026-10-29] The pipeline and test harness came over from Tertiary: `test.yml` on every work-branch push, `workflow.yml` (preflight, signed builds, tests on the release build, verify, publish on tags), `installer-test.yml`, and `plugin/tests` (unit tests, HostTest, golden renders, render regression, ReviewRender, CI scripts). All of it reads `config.cmake`. See README.md, "Tests and the release pipeline", and `plugin/tests/README.md`. Rule (Joe, 2026-10-29): when Tertiary's pipeline or tests improve, the generic part comes here too.
+
 ## Source file registration
 
 Plugin source files are auto-discovered by `plugin/createSourceList.py`, which generates `plugin/sourceListResult.cmake`. You do not need to manually register new `.cpp` files in CMake — just add them to `plugin/source/` and they will be picked up on the next CMake configure.
@@ -115,4 +117,5 @@ The GitHub repository name and `wPLUGIN_NAME` in `config.cmake` can differ (e.g.
 ## Branch convention
 
 - `staging` — active development branch (default). Pushes here deploy the web app to CaulfieldEngineering.com.
-- `main` — production release target. Tags on `main` deploy installers to WordPress and the web app to WonderlandAudio.com.
+- `production` — production release target. Tags on `production` deploy installers to WordPress and the web app to WonderlandAudio.com; the pipeline refuses a tag that isn't on `production`. [Claude 2026-10-29: was `main`, which Tertiary's repo doesn't have; the tag check now uses `production` in both.]
+- Work branches (any other name) run `test.yml` on every push.
