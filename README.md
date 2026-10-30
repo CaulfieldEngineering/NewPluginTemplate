@@ -25,6 +25,7 @@ Ported from Tertiary, 2026-10-29. A plugin made from this template gets the whol
 | `wWOO_PRODUCT_ID` | The WooCommerce product. Required for a release: its key source is checked before publishing, and its Software version is set after |
 | `wCHANGELOG_PAGE_ID` | The WordPress page that shows `CHANGELOG.md` (see "The changelog" below). Empty: no changelog page, the step is skipped |
 | `wPRODUCT_SLUG` | The product's short lower-case name (empty: `wPLUGIN_NAME` in lower case); `scripts/draft-changelog.mjs` reads `HQ/plans/<slug>-test-plan.md` |
+| `wWEB_STAGING_DIR`, `wWEB_LIVE_DIR` | The web demo's folders under `CaulfieldEngineering.com/plug-ins/<repo>/` (empty: `web-staging` and `web`). Staging deploys only to the first; a tag promotes it to the second and to `WonderlandAudio.com/demo/<repo>/` (see "Release flow") |
 
 Write one `set(wKEY value)` per line with no comment after it: the workflows read the file line by line.
 
@@ -43,10 +44,17 @@ A **work branch** (any name), then **staging**, then **production**, then a **v\
 1. **preflight**: on a tag, the tag must be on `production` (a GitHub fetch problem keeps the tag and asks for a re-run, it never deletes it), match `wPROJECT_VERSION` and be newer than every tag. Every release secret must be set: Azure signing, Apple signing, notarization, WordPress, the web demo, plus `wWOO_PRODUCT_ID`. The store product must have a working key source (a "Generator rule" with no generator fails). On staging a missing secret is a warning and that step is skipped, so staging builds can be unsigned.
 2. **build** (Mac and Windows): the build, then the unit tests and pluginval on that very build, sign, package, notarize, staple, then **verify** the final installers: the Mac pkg's signature, stapled ticket and Gatekeeper, and every bundle inside it; Authenticode on the Windows installer and binaries. A `.sha256` travels with each installer.
 3. **publish** (tag only, after both builds): both installers or neither. Hash check, check the store product again, upload, re-download and compare, point the download redirects at the new files, remove older copies of the same version (older versions stay), publish the changelog page and the home page's version line from `CHANGELOG.md` (below), and last of all set the product's **Software version** (what the plugin's version check reports) and read it back.
-4. **web-build**: the Wonderlab demo; on a tag it goes live only after publish.
+4. **web-build**: the Wonderlab demo. Staging deploys only the private preview; a tag, after publish, promotes it to the live demos (see "Release flow" below).
 5. **cleanup-failed-tag**: a failed release deletes its tag so it can be pushed again, except when the tag check never reached a verdict, when publishing stopped part-way, or when the tag was moved.
 
 Secrets (repository settings): `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_ENDPOINT`, `AZURE_CODE_SIGNING_NAME`, `AZURE_CERT_PROFILE_NAME`, `MAC_APPLICATION_CERTIFICATE_BASE64`, `MAC_INSTALLER_CERTIFICATE_BASE64`, `MAC_CERTIFICATE_PASSWORD`, `KEYCHAIN_PASSWORD`, `APPLE_ID`, `APPLE_TEAM_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `WORDPRESS_USERNAME`, `WORDPRESS_APPLICATION_PASSWORD`, `WORDPRESS_SITE`, `WORDPRESS_SFTP_PASS`, `CE_GITHUB_PAT`; optional `SSH_ID` (CaulfieldEngineering.com copies).
+
+### Release flow
+
+[Claude 2026-10-30] Joe: staging is "a place to view what WILL/SHOULD be customer-facing with one last look before its live". Nothing public changes until the tag.
+
+- **Push to staging**: the builds, tests, signing and verify steps; the installers go to `CaulfieldEngineering.com/plug-ins/<repo>/installers-staging/` (not linked from the store; a tag uses `installers/`). The web demo goes only to the private preview, `https://caulfieldengineering.com/plug-ins/<repo>/web-staging/`, which sends `X-Robots-Tag: noindex` and is linked from nowhere; the run's summary prints its URL and commit. The store, the download redirects, the changelog and home pages, the WooCommerce Software version and both live demos are not touched.
+- **v\* tag**: publish (installers to WordPress, redirects, older copies removed, changelog and home pages, Software version). Then, only after publish succeeded, the web demo: if the staging preview was built from the tag's commit, or from a commit with the same source tree (the usual merge of staging into production), and every file matches its checksum (`build-manifest.sha256`, `build-commit.txt`), those exact files go to `WonderlandAudio.com/demo/<repo>/` (the "Try it in your browser" iframe) and `CaulfieldEngineering.com/plug-ins/<repo>/web/` (the folder it replaces is kept as `web.previous`). Otherwise the tag run's own build goes live and the summary says why. Files the previous release listed and this one does not are removed from WordPress. A re-run of an older tag never deploys its demo over a newer release, and an older staging run never replaces a newer preview.
 
 ### The changelog
 

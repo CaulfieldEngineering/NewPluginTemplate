@@ -29,3 +29,8 @@ set(wCHANGELOG_PAGE_ID          "")
 # updates the home page's version line only in a widget with the CSS class wla-version-<slug>, and
 # scripts/draft-changelog.mjs reads HQ/plans/<slug>-test-plan.md.
 set(wPRODUCT_SLUG               "")
+
+# [Claude 2026-10-30] The web demo folders on CaulfieldEngineering.com/plug-ins/{repo}/. A staging push deploys only
+# to the private preview (noindex); a v* tag promotes that preview to the live folder and to WonderlandAudio.com.
+set(wWEB_STAGING_DIR            "web-staging")
+set(wWEB_LIVE_DIR               "web")
