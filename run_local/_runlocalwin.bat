@@ -291,7 +291,7 @@ echo set(PLUGIN_PROCESSOR_CLASS audio_plugin::AudioPluginAudioProcessor^)
 echo set(PLUGIN_EXTRA_INCLUDE_DIRS "%BINARY_DATA_FWD%;!WIZARDCORE_SRC_FWD!"^)
 echo set(PLUGIN_EXTRA_SOURCE_DIRS "%BINARY_DATA_FWD%;!WIZARDCORE_SRC_FWD!"^)
 echo.
-echo include(%WONDERLAB_FWD%/cmake/WonderlabBuild.cmake^)
+echo include("%PLUGIN_SRC_FWD%/../web/wonderlab.cmake"^)
 ) > CMakeLists.txt
 
 :: -- Configure with Emscripten --

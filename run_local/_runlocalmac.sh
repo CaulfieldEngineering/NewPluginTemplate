@@ -244,7 +244,7 @@ set(PLUGIN_PROCESSOR_CLASS audio_plugin::AudioPluginAudioProcessor)
 set(PLUGIN_EXTRA_INCLUDE_DIRS "${BINARY_DATA_DIR}")
 set(PLUGIN_EXTRA_SOURCE_DIRS "${BINARY_DATA_DIR}")
 
-include(\${WONDERLAB_DIR}/cmake/WonderlabBuild.cmake)
+include("\${PLUGIN_SRC_DIR}/../web/wonderlab.cmake")
 EOF
 
 # -- Configure with Emscripten --
