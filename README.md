@@ -56,6 +56,11 @@ Secrets (repository settings): `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIE
 - **Push to staging**: the builds, tests, signing and verify steps; the installers go to `CaulfieldEngineering.com/plug-ins/<repo>/installers-staging/` (not linked from the store; a tag uses `installers/`). The web demo goes only to the private preview, `https://caulfieldengineering.com/plug-ins/<repo>/web-staging/`, which sends `X-Robots-Tag: noindex` and is linked from nowhere; the run's summary prints its URL and commit. The store, the download redirects, the changelog and home pages, the WooCommerce Software version and both live demos are not touched.
 - **v\* tag**: publish (installers to WordPress, redirects, older copies removed, changelog and home pages, Software version). Then, only after publish succeeded, the web demo: if the staging preview was built from the tag's commit, or from a commit with the same source tree (the usual merge of staging into production), and every file matches its checksum (`build-manifest.sha256`, `build-commit.txt`), those exact files go to `WonderlandAudio.com/demo/<repo>/` (the "Try it in your browser" iframe) and `CaulfieldEngineering.com/plug-ins/<repo>/web/` (the folder it replaces is kept as `web.previous`). Otherwise the tag run's own build goes live and the summary says why. Files the previous release listed and this one does not are removed from WordPress. A re-run of an older tag never deploys its demo over a newer release, and an older staging run never replaces a newer preview.
 
+Before pushing any `v*` tag, complete the [account storage check](docs/release-storage.md)
+and run `scripts/check-release-storage.py` with fresh verified evidence. Unknown,
+blocked or insufficient artifact storage stops the tag. Diagnostic test uploads
+warn on failure; required build/render transfers and release artifacts remain strict.
+
 ### The changelog
 
 [Claude 2026-10-30] Joe: "Ideally the changelog gets auto-pushed and it's not Claude or Joe updating each time", written "ideally by AI but I'd like user-facing language". `CHANGELOG.md` is the only place it is written; the site's changelog page and the home page's version line are filled from it on every release.

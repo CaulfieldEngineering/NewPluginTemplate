@@ -1,5 +1,29 @@
 # Agent changes
 
+## CI artifact hygiene and pre-tag storage check (Codex, 2026-10-31)
+
+- `.github/workflows/test.yml`: use workflow/ref concurrency with cancellation;
+  keep all seven uploads at seven-day retention. Six diagnostic result uploads
+  continue on error and add explicit warnings. The universal Mac build upload
+  remains required, including an error when its files are absent. Render download
+  and comparison remain required; missing, empty or mismatched input sets fail,
+  and the first failed comparison cannot be hidden by the second command.
+- `scripts/check-release-storage.py`, `docs/release-storage.md`, `README.md`: before
+  pushing any `v*` tag, estimate storage from all artifacts of the successful staging
+  run, require both installers, and validate a fresh account-level storage review.
+  Missing evidence, blocked uploads, pending recalculation and insufficient room
+  stop the check. Billing usage and repository totals are not presented as an API
+  quota guarantee. No account settings, artifacts, tags or deployments are changed.
+- `scripts/test-release-storage.py`: six offline tests, including 13 invalid
+  evidence cases and missing/expired/empty installer checks, all passed. Workflow
+  validation: actionlint passed; seven upload policies checked; missing, empty,
+  valid and mismatched render-set cases passed; `git diff --check` passed.
+- `.github/workflows/workflow.yml` and product code are unchanged. Live template
+  CI remains subject to the known Actions allowance block until November 1.
+
+Undo: revert this commit. The local storage check does not alter the release
+pipeline or grant release approval.
+
 ## Browser demo test suite (Codex, 2026-10-30)
 
 Ported the generic browser checks from Tertiary to the `pipeline-sync` work branch, starting at `5382fbe2b71669c7389401cd937ddb80115dcedb`. Plugin sources, DSP, the shipping editor and `.github/workflows/workflow.yml` are unchanged.

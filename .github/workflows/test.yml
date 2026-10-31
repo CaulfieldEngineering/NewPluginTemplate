@@ -37,7 +37,7 @@ on:
 
 # A newer push to the same branch cancels the run still going
 concurrency:
-  group: tests-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -125,15 +125,23 @@ jobs:
         retention-days: 7
         name: mac-universal-build
         path: out/
+        if-no-files-found: error
 
 
     - name: Upload logs and renders
       if: always()
+      id: upload-results
+      continue-on-error: true
       uses: actions/upload-artifact@v4
       with:
         retention-days: 7
         name: results-mac-arm64
         path: tests/results/
+
+    - name: Warn if diagnostic upload failed
+      if: always() && steps.upload-results.outcome == 'failure'
+      shell: bash
+      run: echo "::warning::Test results could not be uploaded. Required downstream render comparisons still fail if their inputs are missing."
 
 
   # Job: Mac test (Intel), using the universal build above
@@ -176,11 +184,18 @@ jobs:
 
     - name: Upload logs and renders
       if: always()
+      id: upload-results
+      continue-on-error: true
       uses: actions/upload-artifact@v4
       with:
         retention-days: 7
         name: results-mac-x86_64
         path: tests/results/
+
+    - name: Warn if diagnostic upload failed
+      if: always() && steps.upload-results.outcome == 'failure'
+      shell: bash
+      run: echo "::warning::Test results could not be uploaded. Required downstream render comparisons still fail if their inputs are missing."
 
 
   # Job: Windows build and test
@@ -232,11 +247,18 @@ jobs:
 
     - name: Upload logs and renders
       if: always()
+      id: upload-results
+      continue-on-error: true
       uses: actions/upload-artifact@v4
       with:
         retention-days: 7
         name: results-windows
         path: tests/results/
+
+    - name: Warn if diagnostic upload failed
+      if: always() && steps.upload-results.outcome == 'failure'
+      shell: bash
+      run: echo "::warning::Test results could not be uploaded. Required downstream render comparisons still fail if their inputs are missing."
 
 
   # Job: Compare the renders across the three machines
@@ -258,7 +280,17 @@ jobs:
       run: |
         # Different compilers and chips round floating point differently; 1e-3 (-60 dBFS) is far below
         # anything audible here, and the report shows the actual numbers.
-        set -o pipefail
+        set -euo pipefail
+        # [Codex 2026-10-31] Best-effort result uploads must never make missing
+        # renders look like a passing (zero-file or incomplete) comparison.
+        python3 - <<'PY'
+        from pathlib import Path
+        folders = [Path('results') / name / 'ci/renders'
+                   for name in ('results-windows', 'results-mac-arm64', 'results-mac-x86_64')]
+        names = [{p.name for p in folder.glob('*.wav') if p.is_file()} for folder in folders]
+        if not all(names) or any(group != names[0] for group in names[1:]):
+            raise SystemExit('Missing, empty, or mismatched cross-platform render artifacts')
+        PY
         python3 plugin/tests/regression/compare_renders.py results/results-windows/ci/renders results/results-mac-arm64/ci/renders \
           --tolerance 1e-3 --report compare-windows-vs-mac-arm64.txt | tee -a "$GITHUB_STEP_SUMMARY"
         python3 plugin/tests/regression/compare_renders.py results/results-windows/ci/renders results/results-mac-x86_64/ci/renders \
@@ -266,11 +298,18 @@ jobs:
 
     - name: Upload the comparison
       if: always()
+      id: upload-results
+      continue-on-error: true
       uses: actions/upload-artifact@v4
       with:
         retention-days: 7
         name: render-comparison
         path: compare-*.txt
+
+    - name: Warn if diagnostic upload failed
+      if: always() && steps.upload-results.outcome == 'failure'
+      shell: bash
+      run: echo "::warning::The comparison report could not be uploaded; see the test step and summary for its result."
 
 
   # Job: UI robot tests (PLACEHOLDER)
@@ -380,6 +419,8 @@ jobs:
 
     - name: Upload browser test results
       if: always()
+      id: upload-results
+      continue-on-error: true
       uses: actions/upload-artifact@v4
       with:
         retention-days: 7
@@ -387,6 +428,11 @@ jobs:
         path: |
           tests/results/
           plugin/tests/web/out/
+
+    - name: Warn if diagnostic upload failed
+      if: always() && steps.upload-results.outcome == 'failure'
+      shell: bash
+      run: echo "::warning::Browser test results could not be uploaded; see the test step and summary for its result."
 
   # Windows WebKit has no Web Audio. Build the same sources on macOS for iPhones.
   # Independent builds also avoid making test execution depend on artifact storage.
@@ -479,6 +525,8 @@ jobs:
 
     - name: Upload iPhone results and screenshots
       if: always()
+      id: upload-results
+      continue-on-error: true
       uses: actions/upload-artifact@v4
       with:
         retention-days: 7
@@ -486,6 +534,11 @@ jobs:
         path: |
           tests/results/
           plugin/tests/web/out/
+
+    - name: Warn if diagnostic upload failed
+      if: always() && steps.upload-results.outcome == 'failure'
+      shell: bash
+      run: echo "::warning::iPhone test results could not be uploaded; see the test step and summary for its result."
 
   # One work-branch gate, including the mobile WebKit/Chromium checks in web.
   ci-ok:
