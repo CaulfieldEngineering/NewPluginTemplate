@@ -1,0 +1,10 @@
+{
+  "name": "NewPluginTemplate",
+  "version": "0.1.0",
+  "commit": "5382fbe2b71669c7389401cd937ddb80115dcedb",
+  "wonderlab": "5248a157cfdf472caf1fafc7b9b71dec09485947",
+  "emsdk": "5.0.3",
+  "inspector": true,
+  "browser": "ms-playwright/chromium-1248/chrome-win64/chrome.exe",
+  "platform": "win32"
+}

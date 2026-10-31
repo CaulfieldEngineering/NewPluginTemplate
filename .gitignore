@@ -5,6 +5,9 @@ libs/
 results/
 plugin/tests/reaper/out/
 plugin/tests/reaper/input.wav
+# [Codex 2026-10-30] Browser test screenshots, diffs, logs and advisory AI reports.
+plugin/tests/web/out/
+plugin/tests/web/node_modules/
 plugin/sourceListResult.cmake
 
 # ============================================================================
