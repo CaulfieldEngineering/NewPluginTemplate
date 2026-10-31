@@ -40,6 +40,10 @@ set(wTEST_BUILD_DIR "build-tests")
 set(wTEST_CONFIGURATION "Release")
 set(wTEST_ASAN_BUILD_DIR "build-asan")
 set(wTEST_GOLDEN_DIR "~/.wla-test/goldens/${wPRODUCT_SLUG}")
+# [Claude 2026-10-31] Live test dashboard (tests/dashboard) and release check: the Mac read over SSH (user@host) and its
+# checkout of this repo. Empty = this machine only.
+set(wTEST_DASHBOARD_MAC "")
+set(wTEST_DASHBOARD_MAC_REPO "")
 set(wTEST_AU_TYPE "aufx")
 set(wTEST_CUBASE_RUNNER "")
 set(wTEST_CUBASE_BUILDER "")

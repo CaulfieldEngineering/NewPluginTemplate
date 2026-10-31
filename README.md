@@ -31,7 +31,7 @@ Write one `set(wKEY value)` per line with no comment after it: the workflows rea
 
 ## Branches
 
-A **work branch** (any name), then **staging**, then **production**, then a **v\* tag** on production, which publishes.
+A **work branch** (we call it `development`, as in Tertiary since 2026-10-31), then **staging**, then **production**, then a **v\* tag** on production, which publishes.
 
 | Workflow | Runs on | Does |
 |---|---|---|
