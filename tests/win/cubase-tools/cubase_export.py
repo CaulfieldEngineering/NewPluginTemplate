@@ -44,6 +44,8 @@ print('Chooser buttons:', [b.window_text() for b in buttons], flush=True)
 save = next((b for b in buttons if b.window_text().replace('&', '') == 'Save'), None)
 if save is None:
     raise RuntimeError('Expected the native Save button; nothing confirmed')
-save.click()
+# [Codex 2026-10-30] Restore foreground focus before actual input to the named native Save button.
+chooser.set_focus()
+save.click_input()
 chooser.wait_not('visible', timeout=20)
 print('PASS export filename accepted: ' + str(destination), flush=True)

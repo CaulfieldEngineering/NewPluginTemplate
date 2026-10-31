@@ -46,7 +46,7 @@ release scripts from temporarily replacing the same plugin.
 
 Build with the repository's normal CMake setup, `WLA_TESTS=ON`, `WLA_REVIEW_RENDER=ON` and
 `WLA_COPY_PLUGIN_AFTER_BUILD=OFF`. Windows targets are `<product>_VST3`, `<product>_Standalone`, `HostTest`,
-`<product>Tests`, `ReviewRender`, `UiTest` and `PerfTest` when supplied by the product. Mac additionally builds
+`<product>Tests`, `ReviewRender`, `PerfTest`, and `UiTest` when supplied by the product. Mac additionally builds
 `<product>_AU` when AU is in `wFORMATS`. Product-specific test targets absent from a new template are explicit
 coverage gaps; the wrapper does not create synthetic passes for them.
 
@@ -136,7 +136,7 @@ Cross-machine comparisons still require the transferred artifacts; a quota failu
 | Standalone | Windows reuses the pywinauto control smoke test; Mac starts the built app, waits, captures it and quits. Settings are restored. | Python `pywinauto`, Pillow on Windows; built app; product control names in config. |
 | TwoInstance | Reuses HostTest section 11 from `fix-instance-isolation`; a binary without the section's completion marker is SKIP. | Updated HostTest and VST3. A template without this product check reports PLANNED. |
 | ASan | Uses a repo-local `build-asan` with `WLA_UI_TEST_ASAN:BOOL=ON`; otherwise PLANNED. Sanitizer errors fail. | Instrumented UiTest. The script does not silently rebuild the normal plugin. |
-| Performance | Existing PerfTest DSP, 120 seconds each of open/closed/idle, then 30 instances for 60 seconds. Stores measurements; an agreed budget/sign-off remains PLANNED. | PerfTest where the product supplies it; roughly 8 minutes. |
+| Performance | PerfTest DSP, 120 seconds each of open/closed/idle, then 30 instances for 60 seconds. Includes first batch `firstUs`; an agreed budget/sign-off remains PLANNED. | Build the optional PerfTest target (`WLA_TESTS=ON`); roughly 8 minutes. |
 | Cubase | Existing export automation, machine golden comparison, normal Quit. | Cubase Pro 12, interactive console, pywinauto, psutil, NumPy, SciPy, Pillow, product `.cpr` and media builder, working audio output, golden `harness.wav`. `WLA_CUBASE` overrides host location. |
 | REAPER | Existing Lua/Python harness, matched transport render, repeatability, automation and saved projects; VST3 plus AU on Mac. | REAPER (`WLA_REAPER` override), updated HostTest, psutil on Windows. Product harness path from config. |
 | Logic | PLANNED: `no Logic harness project yet`. Once present: stage AU, auval, copy/open harness, System Events bounce, compare golden, quit. `--no-logic` skips opening even when a project exists. | Logic already set up by Joe; configured `tests/mac/logic/<product> harness.logicx`, default Cmd+B binding, saved cycle/PCM/WAVE/48 kHz/32-bit float/offline settings, golden `logic/harness.wav`, UI scripting permission. The bounce adapter is unverified until that project exists. |

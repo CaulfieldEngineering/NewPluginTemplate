@@ -282,10 +282,22 @@ endif()
 # pluginval on the very build it signs.
 #   <wPLUGIN_NAME>Tests   unit tests on the processor (tests/PluginTests.cpp)   exit code 0 = all passed
 #   HostTest              loads the BUILT plugin (VST3, or the installed AU) as a DAW does (tests/HostTest.cpp)
-option(WLA_TESTS "Build the unit tests and the host test" OFF)
+option(WLA_TESTS "Build the unit tests, host test and performance host" OFF)
 if (WLA_TESTS)
     wla_test_program(${PROJECT_NAME}Tests ${CMAKE_CURRENT_SOURCE_DIR}/tests/PluginTests.cpp JUCE_UNIT_TESTS=0)
     wla_test_program(HostTest ${CMAKE_CURRENT_SOURCE_DIR}/tests/HostTest.cpp
         JUCE_PLUGINHOST_VST3=1 JUCE_PLUGINHOST_AU=$<BOOL:${APPLE}>
         WLA_AU_ID=",${wPLUGIN_CODE},${wPLUGIN_MANUFACTURER_CODE}")
+
+    # [Codex 2026-10-30] Port the independent performance host, including first-block timing. It loads the
+    # selected built VST3; it must not compile or link the product's processor or WizardCore into the host.
+    juce_add_console_app(PerfTest PRODUCT_NAME "PerfTest")
+    target_sources(PerfTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tests/PerfTest.cpp)
+    target_compile_definitions(PerfTest PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_DISPLAY_SPLASH_SCREEN=0
+        JUCE_STANDALONE_APPLICATION=1 JUCE_MODAL_LOOPS_PERMITTED=1 JUCE_PLUGINHOST_VST3=1
+        JUCE_PLUGINHOST_AU=$<BOOL:${APPLE}> WLA_TEST_PRODUCT_NAME="${wPLUGIN_NAME}")
+    target_link_libraries(PerfTest PRIVATE juce::juce_audio_utils juce::juce_recommended_config_flags)
+    if (MSVC)
+        set_property(TARGET PerfTest PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+    endif()
 endif()
