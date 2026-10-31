@@ -244,3 +244,19 @@ python -m unittest discover -s tests/lib -p test_runner.py -v
 These tests exercise failed staging/restoration, build-path containment, all four statuses and coverage,
 and meta-script continuation after a child dies without a report. They do not open any host or touch an
 installed plugin.
+
+## One test run, one report (2026-10-31)
+
+Joe: "when we go to release in a normal process, I'm expecting one test run/GitHub run which yields a passing
+report before moving on." On the final commit, run `Run-All` once on each machine (Windows including web, Mac
+including Logic and the microphone) and let GitHub run once. Then compile the one report:
+
+```powershell
+python tests/lib/combine.py --run win=tests/results/<win-run> --run mac=tests/results/<mac-run-copied-here> `
+  --github-run <run id> --out tests/results/<date>_<rc> --report tests/reports/<rc>.md
+```
+
+It runs no tests. It passes only when every summary passed with zero failed checks, all machines and the GitHub
+run are on the same commit, no checkout had uncommitted tracked changes, and the GitHub run succeeded.
+Development runs while fixing do not count; nothing is waived.
+
