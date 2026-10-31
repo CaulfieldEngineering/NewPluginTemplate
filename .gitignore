@@ -49,3 +49,6 @@ web/web-template/yarn-error.log*
 
 # Optional: uncomment if not using package-lock
 # web/package-lock.json
+
+# [Claude 2026-10-31] Finder metadata; tracked copies made clean Mac checkouts look dirty.
+.DS_Store
