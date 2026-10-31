@@ -9,7 +9,7 @@
 #
 #   mac-build    Apple Silicon (macos-15): builds the universal VST3 (and AU if wFORMATS has it), ReviewRender,
 #                the unit tests and the host test; checks both chip types and wMACOS_MIN_VERSION, runs the unit
-#                tests, auval, pluginval, the host test and a short render (plugin/tests/ci/mac_checks.sh)
+#                tests, auval, pluginval, the host test and a short render (tests/mac/run-all.sh --profile ci)
 #   mac-intel    Intel (macos-15-intel): no build, the same checks on the same universal files
 #   windows      builds the VST3, runs the unit tests, the host test, pluginval and the render
 #   compare      compares the renders of all three: they should sound the same
@@ -103,21 +103,37 @@ jobs:
         cp "$A/${wPLUGIN_NAME}Tests_artefacts/Release/${wPLUGIN_NAME}Tests" out/
         cp "$A/HostTest_artefacts/Release/HostTest" out/
 
+    - name: Check, test and render
+      env:
+        WLA_PLUGINVAL: ${{ runner.temp }}/pv/pluginval.app/Contents/MacOS/pluginval
+      run: bash tests/mac/run-all.sh --profile ci --build-dir out --results-dir tests/results/ci --expect-demo
+
+    - name: Print test summary
+      if: always()
+      shell: bash
+      run: |
+        if [ -f tests/results/ci/summary.md ]; then
+          cat tests/results/ci/summary.md | tee -a "$GITHUB_STEP_SUMMARY"
+        else
+          echo "Tests did not produce a summary; see the failed build/test step." | tee -a "$GITHUB_STEP_SUMMARY"
+        fi
+
+
     - name: Upload the built files (for the Intel job)
       uses: actions/upload-artifact@v4
       with:
+        retention-days: 7
         name: mac-universal-build
         path: out/
 
-    - name: Check, test and render
-      run: bash plugin/tests/ci/mac_checks.sh out "$RUNNER_TEMP/pv/pluginval.app/Contents/MacOS/pluginval" mac-arm64
 
     - name: Upload logs and renders
       if: always()
       uses: actions/upload-artifact@v4
       with:
+        retention-days: 7
         name: results-mac-arm64
-        path: results/
+        path: tests/results/
 
 
   # Job: Mac test (Intel), using the universal build above
@@ -143,14 +159,28 @@ jobs:
         chmod +x out/ReviewRender out/*Tests out/HostTest
 
     - name: Check, test and render
-      run: bash plugin/tests/ci/mac_checks.sh out "$RUNNER_TEMP/pv/pluginval.app/Contents/MacOS/pluginval" mac-x86_64
+      env:
+        WLA_PLUGINVAL: ${{ runner.temp }}/pv/pluginval.app/Contents/MacOS/pluginval
+      run: bash tests/mac/run-all.sh --profile ci --build-dir out --results-dir tests/results/ci --expect-demo
+
+    - name: Print test summary
+      if: always()
+      shell: bash
+      run: |
+        if [ -f tests/results/ci/summary.md ]; then
+          cat tests/results/ci/summary.md | tee -a "$GITHUB_STEP_SUMMARY"
+        else
+          echo "Tests did not produce a summary; see the failed build/test step." | tee -a "$GITHUB_STEP_SUMMARY"
+        fi
+
 
     - name: Upload logs and renders
       if: always()
       uses: actions/upload-artifact@v4
       with:
+        retention-days: 7
         name: results-mac-x86_64
-        path: results/
+        path: tests/results/
 
 
   # Job: Windows build and test
@@ -183,26 +213,30 @@ jobs:
         cmake -S . -B build -A x64 -DWLA_REVIEW_RENDER=ON -DWLA_TESTS=ON -DWLA_COPY_PLUGIN_AFTER_BUILD=OFF -DCPM_JUCE_SOURCE="$T/juce"
         cmake --build build --config Release --target "${wPLUGIN_NAME}_VST3" ReviewRender "${wPLUGIN_NAME}Tests" HostTest -- -m
 
-    - name: Test and render
+    - name: Run Windows test scripts
+      if: always()
+      shell: pwsh
+      env:
+        WLA_PLUGINVAL: ${{ runner.temp }}/pv/pluginval.exe
+      run: pwsh tests/win/Run-All.ps1 -Profile ci -BuildDir build -ResultsDir tests/results/ci -ExpectDemo
+
+    - name: Print test summary
+      if: always()
       shell: bash
       run: |
-        set -o pipefail
-        mkdir -p results
-        A=build/plugin
-        V="$A/${wPLUGIN_NAME}_artefacts/Release/VST3/${wPLUGIN_NAME}.vst3"
-        "$A/${wPLUGIN_NAME}Tests_artefacts/Release/${wPLUGIN_NAME}Tests.exe" 2>&1 | tee results/unit-tests.log
-        "$A/HostTest_artefacts/Release/HostTest.exe" --vst3 "$V" --expect-demo 2>&1 | tee results/hosttest-vst3.log
-        "$(cygpath -m "$RUNNER_TEMP")/pv/pluginval.exe" --strictness-level $STRICTNESS --validate-in-process --output-dir results \
-          --validate "$V" 2>&1 | tee results/pluginval-vst3.log
-        python plugin/tests/regression/render_matrix.py "$A/ReviewRender_artefacts/Release/ReviewRender.exe" \
-          plugin/sample_audio results/renders --quick 2>&1 | tee results/renders.log
+        if [ -f tests/results/ci/summary.md ]; then
+          cat tests/results/ci/summary.md | tee -a "$GITHUB_STEP_SUMMARY"
+        else
+          echo "Tests did not produce a summary; see the failed build/test step." | tee -a "$GITHUB_STEP_SUMMARY"
+        fi
 
     - name: Upload logs and renders
       if: always()
       uses: actions/upload-artifact@v4
       with:
+        retention-days: 7
         name: results-windows
-        path: results/
+        path: tests/results/
 
 
   # Job: Compare the renders across the three machines
@@ -225,15 +259,16 @@ jobs:
         # Different compilers and chips round floating point differently; 1e-3 (-60 dBFS) is far below
         # anything audible here, and the report shows the actual numbers.
         set -o pipefail
-        python3 plugin/tests/regression/compare_renders.py results/results-windows/renders results/results-mac-arm64/renders \
+        python3 plugin/tests/regression/compare_renders.py results/results-windows/ci/renders results/results-mac-arm64/ci/renders \
           --tolerance 1e-3 --report compare-windows-vs-mac-arm64.txt | tee -a "$GITHUB_STEP_SUMMARY"
-        python3 plugin/tests/regression/compare_renders.py results/results-windows/renders results/results-mac-x86_64/renders \
+        python3 plugin/tests/regression/compare_renders.py results/results-windows/ci/renders results/results-mac-x86_64/ci/renders \
           --tolerance 1e-3 --report compare-windows-vs-mac-x86_64.txt | tee -a "$GITHUB_STEP_SUMMARY"
 
     - name: Upload the comparison
       if: always()
       uses: actions/upload-artifact@v4
       with:
+        retention-days: 7
         name: render-comparison
         path: compare-*.txt
 
@@ -331,17 +366,27 @@ jobs:
         npx playwright install chromium
 
     - name: Test the browser demo
-      working-directory: plugin/tests/web
+      run: bash tests/web/test-web.sh --profile ci --engine chromium --results-dir tests/results/ci
+
+    - name: Print test summary
+      if: always()
+      shell: bash
       run: |
-        npm run test:harness
-        npm test -- --no-ai --engine=chromium
+        if [ -f tests/results/ci/summary.md ]; then
+          cat tests/results/ci/summary.md | tee -a "$GITHUB_STEP_SUMMARY"
+        else
+          echo "Tests did not produce a summary; see the failed build/test step." | tee -a "$GITHUB_STEP_SUMMARY"
+        fi
 
     - name: Upload browser test results
       if: always()
       uses: actions/upload-artifact@v4
       with:
+        retention-days: 7
         name: web-test-results
-        path: plugin/tests/web/out/
+        path: |
+          tests/results/
+          plugin/tests/web/out/
 
   # Windows WebKit has no Web Audio. Build the same sources on macOS for iPhones.
   # Independent builds also avoid making test execution depend on artifact storage.
@@ -420,14 +465,27 @@ jobs:
         npm ci
         npx playwright install webkit
     - name: Test iPhone portrait and landscape with real Web Audio
-      working-directory: plugin/tests/web
-      run: npm test -- --no-ai --engine=webkit
+      run: bash tests/web/test-web.sh --profile ci --engine webkit --results-dir tests/results/ci
+
+    - name: Print test summary
+      if: always()
+      shell: bash
+      run: |
+        if [ -f tests/results/ci/summary.md ]; then
+          cat tests/results/ci/summary.md | tee -a "$GITHUB_STEP_SUMMARY"
+        else
+          echo "Tests did not produce a summary; see the failed build/test step." | tee -a "$GITHUB_STEP_SUMMARY"
+        fi
+
     - name: Upload iPhone results and screenshots
       if: always()
       uses: actions/upload-artifact@v4
       with:
+        retention-days: 7
         name: web-mobile-results
-        path: plugin/tests/web/out/
+        path: |
+          tests/results/
+          plugin/tests/web/out/
 
   # One work-branch gate, including the mobile WebKit/Chromium checks in web.
   ci-ok:

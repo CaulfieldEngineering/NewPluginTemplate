@@ -96,3 +96,15 @@ npm run post-release -- --product <slug> --version <x.y.z> [--tag-run <GitHub ru
 It checks the home page's version line (`wla-version`), the changelog page's newest entry and its previous-version links, the download redirects, the store's Software version (`wWOO_PRODUCT_ID`) and `version_check`, then runs the read-only web test; downloads both installers as a customer and compares their SHA-256 with the signed artifacts of the tag's `workflow.yml` run (artifacts are kept 90 days, so run it soon after the release); checks the Authenticode signer (Azure Trusted Signing); installs silently on Windows and leaves it installed, checks the version resources, loads the VST3 in HostTest and runs `HostTest --live-license` with a test key. `mac-post-release.sh` does the Mac half on the cloud Mac: `spctl -a -vv -t install`, `stapler validate`, install, the Info.plist versions, `auval`. A report and a one-paragraph summary; exit 1 on any failure.
 
 Details of each test folder: `plugin/tests/README.md`.
+
+
+### Independently runnable test layout (Codex, 2026-10-30)
+
+`tests/sequence.json` carries the Blocks IDs, CI flags and suite relations. `tests/win/Run-All.ps1` and
+`tests/mac/run-all.sh` call the same row scripts used in both GitHub workflows (`ci` profile). Each calls its
+platform's `Run-All-Product-Tests.ps1` / `run-all-product-tests.sh`, which discovers files in its sibling
+`product/` folder. Both template product folders contain only a README and report "no product tests yet";
+write those tests in each new plugin. The existing generic processor invariants remain at the platform root.
+Reports, binary identities, comparison with prior CI counts, exclusions, and product summaries live under
+`tests/results/`. Test/staging artifacts expire in seven days; release installer retention is unchanged.
+See [the test-script guide](tests/README.md) for commands and the result contract.
