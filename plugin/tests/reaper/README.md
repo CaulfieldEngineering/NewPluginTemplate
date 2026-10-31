@@ -1,6 +1,25 @@
 <!-- Ported from Tertiary by Claude, 2026-10-29: names come from config.cmake. -->
 # REAPER test (parked)
 
+## Windows driver contract (Codex, 2026-10-30)
+
+The configured release-test runner remains a product-specific implementation
+(`wTEST_REAPER_RUNNER` is empty in this template). When implementing it, import
+`ReaperWindows` from `tests/lib/reaper_windows.py`. Construct it with the PID
+returned by the runner's own `subprocess.Popen` and its isolated artifact folder.
+Call `poll()` in the bounded process watchdog and **defer the Lua render until
+it returns true**. The helper honours REAPER's evaluation countdown, clicks only
+the enabled **Still Evaluating** button in **About REAPER v...**, and **Close**
+in **REAPER New Version Notification**. Unknown dialogs remain visible and fail
+the watchdog; they are never accepted speculatively.
+
+Once the Lua log confirms its generated project was saved, call
+`poll(finished=True)` to request native **File: Quit**. Require that owned process
+to exit zero, capture `capture_timeout()` before cleaning up a timed-out owned
+PID, and retain `windows.log` plus the named-dialog screenshots. Never quit an
+already-running REAPER session. Tertiary's validated product driver is the
+reference integration; this parked legacy script is not enabled by the template.
+
 **Status 2026-10-27 (Claude):** tried on the mini PC with REAPER 7.83 (evaluation), then parked for the 1.1 release. What was learned:
 - Passing the `.lua` file on REAPER's command line does run it at start-up (the script built the track with the input).
 - A fresh configuration asks "You have not yet selected an audio device" at start-up, which blocks the script. The setting is `audiodev=` in the `[reaper]` section; it takes effect in `%APPDATA%\REAPER\REAPER.ini` but was ignored when given through `-cfgfile`. Values 2 and 3 open WaveOut; 4 and 6 open no device (one of them is probably Dummy Audio). Not yet confirmed which.
