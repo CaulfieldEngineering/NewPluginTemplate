@@ -106,7 +106,8 @@ comparison is unchanged. REAPER's type identifier is also available through its
 The profile supplies both Intel and ARM VST path keys and keeps REAPER's literal standard-folder tokens
 before the repo path, so REAPER does not append a duplicate installed-product folder after it. Windows
 reuses only unrelated plugin scan metadata to shorten initial scanning. Update/evaluation dialogs are
-handled only by their named Close/Still Evaluating buttons; no licence file is copied or changed. A host
+handled through their named Close/Still Evaluating buttons or About window's own Close after its countdown;
+no licence file is copied or changed. A host
 that renders successfully but fails to exit still reports FAIL, with the audio assertions retained.
 
 Cubase uses a temporary per-user VST3 copy. If the common VST3 slot also contains this product, the same build
@@ -118,6 +119,8 @@ the product export and comparison remain in `plugin/tests/daw/cubase`.
 The moved-project prompt selects the new harness directory. A recognized Cubase 12 Safe Mode prompt keeps
 current preferences; it never disables plugins or deletes preferences. Unknown dialogs stop the test with
 their window text and a screenshot. The configured audio output must be available for the Cubase harness.
+The export adapter replaces the CPR's saved absolute export directory with this run's directory, verifies
+the native edit's value, and refuses to export if it cannot verify that path.
 
 AU uses the user's Components slot, with the same backup/restore discipline and AudioComponentRegistrar reset
 before validation and after restoration. Standalone runs directly from the repo build. The screenshot phase

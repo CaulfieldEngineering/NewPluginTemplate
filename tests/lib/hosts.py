@@ -448,7 +448,9 @@ def web(r, args):
     if not metadata.exists():
         r.check('web-build', 'SKIP', 'repo web build missing; run npm run build in plugin/tests/web')
         return
-    r.data['build'] = dict(path=str(web_build), id='sha256:' + __import__('hashlib').sha256(metadata.read_bytes()).hexdigest())
+    manifest = json.loads(metadata.read_text(encoding='utf-8'))
+    build_id = manifest.get('buildId') or manifest.get('commit') or 'no embedded build id'
+    r.data['build'] = dict(path=str(web_build), id=build_id + '; manifest-sha256:' + __import__('hashlib').sha256(metadata.read_bytes()).hexdigest())
     print('Testing web build: ' + str(web_build) + '\nBuild manifest id: ' + r.data['build']['id'], flush=True)
     # The supplied Node/Playwright runner owns browser launch, local serving and teardown.
     # --no-ai prevents it spawning another agent; AI reviews this collected report afterwards.
