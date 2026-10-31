@@ -17,13 +17,17 @@ param(
     [string]$BuildDir = "build-tests",
     [string]$JuceDir = "",
     [string]$Reference = "",
-    [switch]$SkipBuild
+    [switch]$SkipBuild,
+    [switch]$SkipStandalone,
+    [string]$ResultsDir = "",
+    [int]$TimeoutSeconds = 1200
 )
 
 $ErrorActionPreference = "Continue"
 $Root = (Resolve-Path "$PSScriptRoot\..\..").Path
 Set-Location $Root
-$Results = Join-Path $BuildDir "results"
+# [Codex 2026-10-30] Structured results for the repo-root release scripts.
+$Results = if ($ResultsDir) { $ResultsDir } else { Join-Path $BuildDir "results" }
 New-Item -ItemType Directory -Force $Results | Out-Null
 $Rows = @()
 $Start = Get-Date
@@ -34,17 +38,28 @@ function Record([string]$Name, [bool]$Ok, [string]$Detail, [datetime]$Since) {
     Write-Host ("{0,-5} {1}  ({2} s)  {3}" -f $(if ($Ok) { "PASS" } else { "FAIL" }), $Name, $secs, $Detail)
 }
 
+# [Codex 2026-10-30] Bounded children; missing test binaries are explicit SKIP.
 function Run([string]$Name, [string]$Exe, [string[]]$Arguments, [string]$Log) {
     $t = Get-Date
-    # Start-Process -Wait: pluginval is a Windows GUI program, which PowerShell's & doesn't wait for
+    if (-not $Exe -or -not (Test-Path -LiteralPath $Exe)) {
+        $script:Rows += [pscustomobject]@{ Check=$Name; Result="SKIP"; Seconds=0; Detail="test executable missing: $Exe" }
+        return
+    }
     $quoted = $Arguments | ForEach-Object { if ($_ -match ' ') { "`"$_`"" } else { $_ } }
-    $options = @{ FilePath = $Exe; NoNewWindow = $true; Wait = $true; PassThru = $true
-                  RedirectStandardOutput = (Join-Path $Results $Log); RedirectStandardError = (Join-Path $Results "$Log.err") }
-    if ($quoted) { $options.ArgumentList = $quoted }   # Start-Process refuses an empty argument list
-    $p = Start-Process @options
-    $code = $p.ExitCode
-    $last = (Get-Content (Join-Path $Results $Log) -Tail 1)
-    Record $Name ($code -eq 0) "$last" $t
+    $options = @{ FilePath=$Exe; NoNewWindow=$true; PassThru=$true
+        RedirectStandardOutput=(Join-Path $Results $Log); RedirectStandardError=(Join-Path $Results "$Log.err") }
+    if ($quoted) { $options.ArgumentList = $quoted }
+    try {
+        $p = Start-Process @options
+        $null = $p.Handle  # Keep the native handle: Windows PowerShell otherwise loses ExitCode after exit.
+        if (-not $p.WaitForExit($TimeoutSeconds * 1000)) {
+            & taskkill /PID $p.Id /T /F | Out-Null
+            Record $Name $false "timeout after $TimeoutSeconds seconds; $Log" $t
+            return
+        }
+        $p.WaitForExit()
+        Record $Name ($p.ExitCode -eq 0) "exit $($p.ExitCode); $Log; $((Get-Content (Join-Path $Results $Log) -Tail 1))" $t
+    } catch { Record $Name $false "$_" $t }
 }
 
 # The plugin's name from config.cmake: the targets and files are named after it
@@ -92,9 +107,17 @@ if ($Reference) {
     Run "renders compared with $Reference" $py @("plugin\tests\regression\compare_renders.py", $Reference, "$Results\renders", "--tolerance", "1e-6") "compare.log"
 }
 
+# [Codex 2026-10-30] Run the existing UI robot when the product supplies it.
+if (Test-Path "plugin/tests/UiTest.cpp") {
+    Run "UI robot" "$Art\UiTest_artefacts\Release\UiTest.exe" @("--snapshots", "$Results\ui-snapshots") "ui-tests.log"
+} else {
+    $Rows += [pscustomobject]@{ Check="UI robot"; Result="PLANNED"; Seconds=0; Detail="Add this product's UI robot scenarios" }
+}
+
 # Summary
 Write-Host ""
 Write-Host "=== $Name test summary ($([math]::Round(((Get-Date) - $Start).TotalMinutes, 1)) min) ==="
+$Rows | ConvertTo-Json -Depth 6 | Set-Content -Encoding UTF8 (Join-Path $Results "checks.json")
 $Rows | Format-Table -AutoSize | Out-String | Write-Host
 $failed = @($Rows | Where-Object Result -eq "FAIL").Count
 Write-Host $(if ($failed -eq 0) { "ALL PASSED" } else { "$failed FAILED - logs in $Results" })
