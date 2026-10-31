@@ -5,11 +5,11 @@
     "renders": 4
   },
   "mac": {
-    "architecture_min_os_assertions": 15,
+    "architecture_min_os_assertions": 12,
     "unit_sections": 6,
     "host_vst3_pass": 0,
     "host_au_pass": 0,
     "renders": 4
   },
-  "source": "Before layout: f599de9, run 41158822526, Windows job 124411987838. Mac architecture/unit/render counts from unchanged mac_checks.sh and render settings; Mac host baseline awaits transferred artifacts."
+  "source": "Before layout: f599de9, run 41158822526, Windows job 124411987838. Mac architecture/unit/render counts from the old mac_checks.sh and unchanged config: VST3 only, four universal binaries (12 checks). Mac HostTest pass counts are reported but have no measured pre-layout floor because the upload quota skipped that job."
 }
