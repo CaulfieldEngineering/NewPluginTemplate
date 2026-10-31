@@ -190,7 +190,7 @@ if %errorlevel% neq 0 (
     pause
     exit /b 1
 )
-cd "%~dp0\.."
+cd /d "%~dp0\..\.."
 
 node "%cd%\plugin\web\assemble.mjs" --wonderlab "!WONDERLAB!" --name "!REPO!" --build "!WEB_BUILD_DIR!" --samples "%cd%\plugin\sample_audio"
 if errorlevel 1 exit /b 1
