@@ -12,7 +12,8 @@
 #    tests/reports/<Report>.md and the same view as the dashboard, tests/reports/<Report>.html.
 #    Prints PASS or FAIL and exits 0 or 1.
 #
-# Machine settings live outside the repo: $HOME\.wla-test\env.ps1 here, ~/.wla-test/env.sh on the Mac.
+# Machine settings live outside the repo: $HOME\.wla-test\env.ps1 here, ~/.wla-test/env.sh on the Mac. Both are optional
+# overrides only (2026-10-31): tools default to the pinned copies in .tools (scripts/lib/tools.json).
 # The Mac comes from config.cmake (wTEST_DASHBOARD_MAC, wTEST_DASHBOARD_MAC_REPO).
 param([Parameter(Mandatory)][string]$Report, [string]$Branch = 'development', [switch]$NoWeb)
 $ErrorActionPreference = 'Stop'
@@ -22,7 +23,11 @@ $Python = if ($env:WLA_TEST_PYTHON) { $env:WLA_TEST_PYTHON } else { 'python' }
 $envFile = Join-Path $HOME '.wla-test\env.ps1'
 if (Test-Path $envFile) { . $envFile }
 function Say($text) { Write-Host ("[{0:HH:mm:ss}] {1}" -f (Get-Date), $text) }
-function Fail($text) { Say "FAIL: $text"; exit 1 }
+# [Claude 2026-10-31] Joe: "test suite started at xxx and ended at yyy so I can feel for how long they all take."
+$RunStart = Get-Date
+function RunTime { $end = Get-Date; $t = $end - $RunStart
+    Say ("Release check started {0:yyyy-MM-dd HH:mm:ss}, ended {1:yyyy-MM-dd HH:mm:ss}, took {2} h {3} min {4} s" -f $RunStart, $end, [int][math]::Floor($t.TotalHours), $t.Minutes, $t.Seconds) }
+function Fail($text) { Say "FAIL: $text"; RunTime; exit 1 }
 
 # 1. Commit and dashboard ----------------------------------------------------------------------------
 $commit = (git rev-parse HEAD).Trim()
@@ -35,6 +40,9 @@ if (-not (Get-NetTCPConnection -LocalPort 4120 -State Listen -ErrorAction Silent
     Start-Process -WindowStyle Hidden -FilePath $Python -ArgumentList @('tests/dashboard/server.py', '--port', '4120')
     Say 'Started the dashboard: http://127.0.0.1:4120/'
 } else { Say 'Dashboard already running on port 4120' }
+# [Claude 2026-10-31] Open it on the whole plan (every test, in run order, filling in as it runs).
+for ($i = 0; $i -lt 20 -and -not (Get-NetTCPConnection -LocalPort 4120 -State Listen -ErrorAction SilentlyContinue); $i++) { Start-Sleep -Milliseconds 500 }
+Start-Process 'http://127.0.0.1:4120/?plan=all'
 
 # 2. Same commit on the Mac, then both machines at once -----------------------------------------------
 $mac = $null
@@ -59,9 +67,11 @@ Say 'Windows: building'
 cmake --build build-tests --config Release -j 8 | Out-File (Join-Path $Root "tests/results/$stamp-win-build.log")
 if ($LASTEXITCODE) { Fail 'Windows build failed' }
 if (-not $NoWeb) {
-    if ($env:WLA_EMSDK_ENV) { . $env:WLA_EMSDK_ENV *> $null }
-    Push-Location plugin/tests/web; npm run build *> (Join-Path $Root "tests/results/$stamp-web-build.log"); $webCode = $LASTEXITCODE; Pop-Location
-    if ($webCode) { Fail 'web build failed' }
+    # [Claude 2026-10-31] The one web build script (scripts/web/build-web.ps1 -Test: the same plugin/tests/web/build.mjs as
+    # `npm run build`). It takes Emscripten and Wonderlab from WLA_EMSDK_ENV / EMSDK and WONDERLAB_DIR when env.ps1 sets
+    # them, else the pinned copies in .tools (scripts/lib/tools.json), so a fresh machine needs no settings file.
+    & powershell -NoProfile -ExecutionPolicy Bypass -File scripts/web/build-web.ps1 -Test *> (Join-Path $Root "tests/results/$stamp-web-build.log"); $webCode = $LASTEXITCODE
+    if ($webCode) { Fail "web build failed; see tests/results/$stamp-web-build.log" }
 }
 Say 'Windows: Run-All'
 & powershell -NoProfile -ExecutionPolicy Bypass -File tests/win/Run-All.ps1 -ResultsDir "tests/results/$stamp"
@@ -104,4 +114,5 @@ Say "GitHub run $runId finished"
 & $Python tests/lib/combine.py @runs --github-run $runId --out "tests/results/$stamp/release" --report "tests/reports/$Report.md" --title "$product $Report test report"
 $code = $LASTEXITCODE
 Say $(if ($code) { "FAIL. Report: tests/reports/$Report.md and .html" } else { "PASS. Report: tests/reports/$Report.md and .html" })
+RunTime
 exit $code

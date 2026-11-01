@@ -13,7 +13,7 @@ NewPluginTemplate  ──(gh repo create --template)──→  New plugin repo
                                                             ↓
                                                     WizardCore (already wired as dependency)
                                                     CI/CD (pre-configured)
-                                                    run_local scripts (ready to use)
+                                                    build scripts in scripts/ (ready to use)
 ```
 
 New repos are created from this template using `NewRepositoryScript/NewRepositoryMac.sh` (or `NewRepositoryWin.bat` on Windows), which also sets up GitHub secrets automatically.
@@ -30,7 +30,7 @@ set(wPROJECT_VERSION    "0.1.0")
 set(wPLUGIN_CODE        "MPLG")   # Unique 4-char code per plugin
 ```
 
-The run_local scripts, CI/CD pipeline, and installer configs all read from `config.cmake` dynamically — no other files need hardcoded names.
+The build scripts (`scripts/`), CI/CD pipeline, and installer configs all read from `config.cmake` dynamically — no other files need hardcoded names.
 
 ## Directory structure
 
@@ -38,8 +38,8 @@ The run_local scripts, CI/CD pipeline, and installer configs all read from `conf
 /plugin/source/       ← All plugin C++ source goes here
 /plugin/images/       ← Binary assets (images embedded via JUCE BinaryData)
 /plugin/sample_audio/ ← Demo audio tracks for the Wonderlab web build
-/run_local/           ← Local build scripts (Windows + macOS)
-/run_local/QuickScripts/ ← One-click web build + deploy scripts
+/scripts/             ← Build scripts: win/, mac/, web/, lib/, sequence.json (see scripts/README.md)
+/tests/               ← Test scripts: win/, mac/, web/, lib/, sequence.json (see tests/README.md)
 /cmake/               ← CPM cmake package manager bootstrap
 /libs/                ← Dependencies land here (juce, wizardcore — git-ignored)
 /package_config/      ← Installer templates (Inno Setup, macOS productbuild)
@@ -81,12 +81,12 @@ When ready to push: commit & push WizardCore first, then the plugin. CI runners 
 
 ## Local builds
 
-- **Windows**: `run_local/_runlocalwin.bat` — interactive, prompts for demo/full and web build options
-- **macOS**: `run_local/_runlocalmac.sh` — same flow
-- **Quick deploy to CE server**: `run_local/QuickScripts/build_deploy_ce.bat`
-- **Quick deploy to WordPress**: `run_local/QuickScripts/build_deploy_wp.bat`
+[Claude 2026-10-31] `run_local/` was replaced by `scripts/` (the same pattern as `tests/`; GitHub calls the same scripts):
 
-Before using QuickScripts, update the deployment configuration block at the top of each script (SSH key path, server address, destination path).
+- **Windows**: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\win\Build-All.ps1` (plug-in, signing where credentials allow, Inno Setup installer, verify, web demo); each step also alone (`Build-Plugin.ps1 -Demo`, `build-web.ps1`, ...), `-DryRun` prints the commands
+- **macOS**: `bash scripts/mac/build-all.sh` (`--adhoc` to exercise signing without a certificate, `--dry-run`)
+- **No live deploys from a desk**: the old QuickScripts pushed web builds straight to the live sites and were removed. Live demos and installers go out only from `workflow.yml` on a `v*` tag; `scripts/web/deploy-staging` updates only the private web-staging preview
+- Tools (pluginval, Inno Setup, ninja, emsdk, Wonderlab) are fetched pinned into `.tools/`; see `scripts/README.md`
 
 ## CI/CD
 
@@ -112,7 +112,7 @@ The Wonderlab web build calls `processor->setDemoState(false)` so the web demo a
 
 The GitHub repository name and `wPLUGIN_NAME` in `config.cmake` can differ (e.g., repo=`concept-fattener`, plugin=`Fattener`). JUCE generates all build artifacts under `wPLUGIN_NAME`. The CI/CD workflow uses `wPLUGIN_NAME` for artifact paths, package names, installer filenames, and web build outputs. It uses the repository name only for server deploy directory paths and URL slugs.
 
-**Never hardcode product names in the workflow, run_local scripts, or package configs.** Everything is driven by `config.cmake`.
+**Never hardcode product names in the workflow, build scripts, or package configs.** Everything is driven by `config.cmake`.
 
 ## Branch convention
 

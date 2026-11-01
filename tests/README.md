@@ -305,6 +305,13 @@ running, or was cut off if `run-end` has been written.
 {"v": 1, "time": "2026-10-31T13:31:40-04:00", "event": "run-end", "run": "all", "status": "PASS", "counts": {"PASS": 225, "FAIL": 0, "SKIP": 0, "PLANNED": 13}, "seconds": 3555.0}
 ```
 
+Run times (Joe, 2026-10-31: "test suite started at xxx and ended at yyy so I can feel for how long they all take"):
+`Run-All` (both platforms) and `Run-Release-Check.ps1` print the start, end and duration when they finish; the
+single report opens with the whole run's start, end and total, and gives Started / Finished / Duration per machine,
+per GitHub job and for the GitHub run, and a Duration per test; the dashboard shows the run's start with a live
+elapsed clock, each machine's and the GitHub run's elapsed time, and each test's duration. All come from the
+`time` and `seconds` fields above.
+
 ## Live dashboard (2026-10-31)
 
 Joe: watch the whole run live, local and GitHub; "reports and screenshots and statuses print here"; the final
@@ -314,6 +321,15 @@ in the background on this machine's tailnet address, port 4120, and open it; `Da
 `serve.sh`) runs it in the foreground on http://127.0.0.1:4120/;
 `-BindHost`/`--host` takes this machine's tailnet address instead (100.64.0.0/10 only; never public).
 `Run-All -Dashboard` / `run-all.sh --dashboard` and the release check start it too.
+
+The picker at the top (Joe, 2026-10-31) chooses what the page shows: Run all (every machine, or Windows or Mac alone),
+one of the Test Suites (SU-01 to SU-06), or a single test. It lists every test that will run, in run order (this
+platform's product tests first, then the rest in `sequence.json` order, as `run.py` runs them), before anything starts,
+and fills in as it runs: an icon per row (hollow circle not started, spinner running, check passed, cross failed, muted
+for skipped and planned), passed / failed / skipped / planned counts, Started, Stopped and Duration, and the run's start,
+end and elapsed time at the top. When nothing is running it says "Idle, last run ended ...". A row expands while running
+and after: its checks, log tails, screenshots and numbers. `?plan=all`, `all:win`, `SU-03` or `test:W-09` in the address
+picks the view; `Run-Release-Check.ps1` opens it on `?plan=all`. The saved report page has the same layout.
 
 It reads only what runs write: each machine's newest `tests/results/<run>/progress.jsonl` and `<ID>.json`
 (the Mac over SSH, from `wTEST_DASHBOARD_MAC` / `wTEST_DASHBOARD_MAC_REPO` in config.cmake), and the GitHub

@@ -47,6 +47,8 @@ env:
   JUCE_TAG: 8.0.8            # Same as CMakeLists.txt
   PLUGINVAL_TAG: v1.0.4
   STRICTNESS: 10             # pluginval strictness (5 is the usual minimum for host compatibility)
+  # [Claude 2026-10-31] Build-step results (scripts/lib/report.py) next to the test results, in each job's upload
+  WLA_BUILD_RESULTS: tests/results/build
 
 jobs:
 
@@ -69,8 +71,7 @@ jobs:
         git clone --depth 1 --branch "$JUCE_TAG" https://github.com/juce-framework/JUCE.git "$RUNNER_TEMP/juce"
         brew list ninja >/dev/null 2>&1 || brew install ninja
         brew list ccache >/dev/null 2>&1 || brew install ccache
-        curl -fsSL -o "$RUNNER_TEMP/pv.zip" "https://github.com/Tracktion/pluginval/releases/download/$PLUGINVAL_TAG/pluginval_macOS.zip"
-        unzip -q -o "$RUNNER_TEMP/pv.zip" -d "$RUNNER_TEMP/pv"
+        python3 scripts/lib/tools.py path pluginval   # [Claude 2026-10-31] pinned in scripts/lib/tools.json
 
     - name: Compiler cache
       uses: actions/cache@v4
@@ -79,19 +80,13 @@ jobs:
         key: ccache-mac-${{ github.sha }}
         restore-keys: ccache-mac-
 
-    - name: Configure (universal)
+    # [Claude 2026-10-31] scripts/mac/build-plugin.sh (B-01), the same build a desk runs (scripts/README.md)
+    - name: Configure and build (universal)
       run: |
-        cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
-          -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
-          -DWLA_REVIEW_RENDER=ON -DWLA_TESTS=ON -DWLA_COPY_PLUGIN_AFTER_BUILD=OFF \
-          -DCPM_JUCE_SOURCE="$RUNNER_TEMP/juce" \
-          -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-
-    - name: Build
-      run: |
-        TARGETS="${wPLUGIN_NAME}_VST3 ReviewRender ${wPLUGIN_NAME}Tests HostTest"
-        if [ "$HAS_AU" = 1 ]; then TARGETS="$TARGETS ${wPLUGIN_NAME}_AU"; fi
-        cmake --build build --target $TARGETS
+        TARGETS="${wPLUGIN_NAME}_VST3,ReviewRender,${wPLUGIN_NAME}Tests,HostTest"
+        if [ "$HAS_AU" = 1 ]; then TARGETS="$TARGETS,${wPLUGIN_NAME}_AU"; fi
+        bash scripts/mac/build-plugin.sh --build-dir build --generator Ninja --universal --tests --review-render \
+          --juce-source "$RUNNER_TEMP/juce" --ccache --target "$TARGETS"
 
     - name: Collect the built files
       run: |
@@ -104,8 +99,6 @@ jobs:
         cp "$A/HostTest_artefacts/Release/HostTest" out/
 
     - name: Check, test and render
-      env:
-        WLA_PLUGINVAL: ${{ runner.temp }}/pv/pluginval.app/Contents/MacOS/pluginval
       run: bash tests/mac/run-all.sh --profile ci --build-dir out --results-dir tests/results/ci --expect-demo
 
     - name: Print test summary
@@ -162,13 +155,10 @@ jobs:
 
     - name: Get pluginval
       run: |
-        curl -fsSL -o "$RUNNER_TEMP/pv.zip" "https://github.com/Tracktion/pluginval/releases/download/$PLUGINVAL_TAG/pluginval_macOS.zip"
-        unzip -q -o "$RUNNER_TEMP/pv.zip" -d "$RUNNER_TEMP/pv"
+        python3 scripts/lib/tools.py path pluginval   # [Claude 2026-10-31] pinned in scripts/lib/tools.json
         chmod +x out/ReviewRender out/*Tests out/HostTest
 
     - name: Check, test and render
-      env:
-        WLA_PLUGINVAL: ${{ runner.temp }}/pv/pluginval.app/Contents/MacOS/pluginval
       run: bash tests/mac/run-all.sh --profile ci --build-dir out --results-dir tests/results/ci --expect-demo
 
     - name: Print test summary
@@ -218,21 +208,18 @@ jobs:
       run: |
         T=$(cygpath -m "$RUNNER_TEMP")   # forward slashes, so CMake doesn't read \ as escapes
         git clone --depth 1 --branch "$JUCE_TAG" https://github.com/juce-framework/JUCE.git "$T/juce"
-        curl -fsSL -o "$T/pv.zip" "https://github.com/Tracktion/pluginval/releases/download/$PLUGINVAL_TAG/pluginval_Windows.zip"
-        unzip -q -o "$T/pv.zip" -d "$T/pv"
+        python scripts/lib/tools.py path pluginval   # [Claude 2026-10-31] pinned in scripts/lib/tools.json
 
     - name: Configure and build
-      shell: bash
-      run: |
-        T=$(cygpath -m "$RUNNER_TEMP")
-        cmake -S . -B build -A x64 -DWLA_REVIEW_RENDER=ON -DWLA_TESTS=ON -DWLA_COPY_PLUGIN_AFTER_BUILD=OFF -DCPM_JUCE_SOURCE="$T/juce"
-        cmake --build build --config Release --target "${wPLUGIN_NAME}_VST3" ReviewRender "${wPLUGIN_NAME}Tests" HostTest -- -m
+      shell: pwsh
+      run: |   # [Claude 2026-10-31] scripts/win/Build-Plugin.ps1 (B-01)
+        $T = $env:RUNNER_TEMP -replace '\\', '/'
+        pwsh scripts/win/Build-Plugin.ps1 -BuildDir build -Tests -ReviewRender -JuceSource "$T/juce" `
+          -Targets "$($env:wPLUGIN_NAME)_VST3,ReviewRender,$($env:wPLUGIN_NAME)Tests,HostTest"
 
     - name: Run Windows test scripts
       if: always()
       shell: pwsh
-      env:
-        WLA_PLUGINVAL: ${{ runner.temp }}/pv/pluginval.exe
       run: pwsh tests/win/Run-All.ps1 -Profile ci -BuildDir build -ResultsDir tests/results/ci -ExpectDemo
 
     - name: Print test summary
@@ -295,6 +282,9 @@ jobs:
           --tolerance 1e-3 --report compare-windows-vs-mac-arm64.txt | tee -a "$GITHUB_STEP_SUMMARY"
         python3 plugin/tests/regression/compare_renders.py results/results-windows/ci/renders results/results-mac-x86_64/ci/renders \
           --tolerance 1e-3 --report compare-windows-vs-mac-x86_64.txt | tee -a "$GITHUB_STEP_SUMMARY"
+
+    - name: Build steps and workflows agree (scripts/sequence.json)
+      run: python3 scripts/lib/check-sequence.py --github
 
     - name: Upload the comparison
       if: always()
@@ -395,8 +385,7 @@ jobs:
     - name: Build the web demo
       shell: bash
       run: |
-        set -euo pipefail
-        node plugin/tests/web/build.mjs 2>&1 | tee plugin/tests/web/out/build.log
+        bash scripts/web/build-web.sh --test   # [Claude 2026-10-31] B-06; also writes plugin/tests/web/out/build.log
 
     - name: Install browser tests
       working-directory: plugin/tests/web
@@ -502,8 +491,7 @@ jobs:
     - name: Build the web demo
       shell: bash
       run: |
-        set -euo pipefail
-        node plugin/tests/web/build.mjs 2>&1 | tee plugin/tests/web/out/build.log
+        bash scripts/web/build-web.sh --test   # [Claude 2026-10-31] B-06; also writes plugin/tests/web/out/build.log
 
     - name: Install WebKit
       working-directory: plugin/tests/web

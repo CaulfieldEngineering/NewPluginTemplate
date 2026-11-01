@@ -52,3 +52,7 @@ web/web-template/yarn-error.log*
 
 # [Claude 2026-10-31] Finder metadata; tracked copies made clean Mac checkouts look dirty.
 .DS_Store
+
+# [Claude 2026-10-31] Pinned tools fetched by scripts/lib/tools.py, and build-step results (scripts/lib/report.py)
+.tools/
+scripts/results/
